@@ -1,0 +1,8 @@
+# Insert the provider-neutral native-session takeover registry into the host tree.
+# The host profile supplies storage-domain, session-persistence, and the DSH
+# Agent factory. Native provider processes are not part of this plugin.
+- insert:
+    - id: session-resume
+      name: 'dsh-assembly.resume'
+      config:
+        autoRecover: true

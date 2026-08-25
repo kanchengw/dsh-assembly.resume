@@ -1,0 +1,63 @@
+{
+  "compilerOptions": {
+    "target": "es2024",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "composite": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": false,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": ["node"],
+    "paths": {
+      "@deepseek-ai/cordis": ["../../deepseek-harness-latest/vendor/cordis/src"],
+      "@deepseek-ai/dsh-agent": ["../../deepseek-harness-latest/packages/core/agent/src"],
+      "@deepseek-ai/dsh-brand": ["../../deepseek-harness-latest/packages/util/brand/src"],
+      "@deepseek-ai/dsh-invariants": ["../../deepseek-harness-latest/packages/runtime-diagnostics/invariants/src"],
+      "@deepseek-ai/dsh-llm": ["../../deepseek-harness-latest/packages/llm/llm/src"],
+      "@deepseek-ai/dsh-session": ["../../deepseek-harness-latest/packages/core/session/src"],
+      "@deepseek-ai/dsh-session/*": ["../../deepseek-harness-latest/packages/core/session/src/*"],
+      "@deepseek-ai/dsh-storage": ["../../deepseek-harness-latest/packages/storage/storage/src"],
+      "@deepseek-ai/dsh-storage-domain": ["../../deepseek-harness-latest/packages/storage/storage-domain/src"],
+      "@deepseek-ai/dsh-typert-protocol": ["../../deepseek-harness-latest/packages/typert/protocol/src"],
+      "@deepseek-ai/schemastery": ["../../deepseek-harness-latest/vendor/schemastery/src"]
+    }
+  },
+  "include": [
+    "src/index.ts",
+    "src/types.ts",
+    "src/spec.ts",
+    "src/errors.ts",
+    "src/invariant.ts",
+    "src/providers.ts",
+    "src/transcript.ts",
+    "src/remote.ts",
+    "src/typert.host.ts",
+    "src/typert.remote-client.ts"
+  ],
+  "references": [
+    { "path": "../../deepseek-harness-latest/vendor/cordis" },
+    { "path": "../../deepseek-harness-latest/packages/core/agent" },
+    { "path": "../../deepseek-harness-latest/vendor/schemastery" },
+    { "path": "../../deepseek-harness-latest/packages/util/brand" },
+    { "path": "../../deepseek-harness-latest/packages/runtime-diagnostics/invariants" },
+    { "path": "../../deepseek-harness-latest/packages/core/session" },
+    { "path": "../../deepseek-harness-latest/packages/llm/llm" },
+    { "path": "../../deepseek-harness-latest/packages/storage/storage" },
+    { "path": "../../deepseek-harness-latest/packages/storage/storage-domain" },
+    { "path": "../../deepseek-harness-latest/packages/typert/protocol" }
+  ]
+}
