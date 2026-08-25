@@ -436,7 +436,7 @@ describe('native provider semantic transcript parsing', () => {
     ]).filter(event => event.kind === 'assistant')).toHaveLength(1)
   })
 
-  it('omits Codex tool traces because the native runtime cannot be resumed in DSH', () => {
+  it('parses a Codex function call and its output into one DSH tool exchange', () => {
     const events = parseCodexTranscript([
       { type: 'session_meta', payload: { session_id: 'codex-tools', model_provider: 'openai', model: 'gpt-5' } },
       { type: 'event_msg', payload: { type: 'user_message', message: 'run tests', turn_id: 'turn-1' } },
@@ -446,12 +446,62 @@ describe('native provider semantic transcript parsing', () => {
     ])
     expect(events).toEqual([
       expect.objectContaining({ kind: 'user' }),
+      expect.objectContaining({
+        kind: 'assistant',
+        content: [],
+        toolCalls: [{ callId: 'call-1', name: 'shell', arguments: '{"cmd":"pnpm test"}' }],
+      }),
+      expect.objectContaining({ kind: 'tool-result', callId: 'call-1', content: [{ type: 'text', text: 'passed' }] }),
       expect.objectContaining({ kind: 'assistant', content: [{ type: 'text', text: 'All tests passed' }] }),
     ])
-    expect(events.some(event => event.kind === 'tool-result' || (event.kind === 'assistant' && event.toolCalls !== undefined))).toBe(false)
+    expect(() => buildDshSeed(events)).not.toThrow()
   })
 
-  it('skips a Codex tool trace even when transport records carry different turns', () => {
+  it('preserves a structured Codex tool failure status', () => {
+    const events = parseCodexTranscript([
+      { type: 'session_meta', payload: { session_id: 'codex-failed-tool', model_provider: 'openai', model: 'gpt-5' } },
+      { type: 'event_msg', payload: { type: 'user_message', message: 'run the check' } },
+      { type: 'response_item', payload: { type: 'function_call', call_id: 'call-1', name: 'shell', arguments: '{"cmd":"pnpm test"}' } },
+      { type: 'response_item', payload: { type: 'function_call_output', call_id: 'call-1', output: 'command failed', is_error: true } },
+    ])
+
+    expect(events).toContainEqual(expect.objectContaining({
+      kind: 'tool-result',
+      callId: 'call-1',
+      isError: true,
+    }))
+    expect(() => buildDshSeed(events)).not.toThrow()
+  })
+
+  it('groups consecutive Codex tool calls before their outputs', () => {
+    const events = parseCodexTranscript([
+      { type: 'session_meta', payload: { session_id: 'codex-multiple-tools', model_provider: 'openai', model: 'gpt-5' } },
+      { type: 'event_msg', payload: { type: 'user_message', message: 'inspect and test' } },
+      { type: 'response_item', payload: { type: 'function_call', call_id: 'call-1', name: 'shell', arguments: '{"cmd":"ls"}' } },
+      { type: 'response_item', payload: { type: 'function_call', call_id: 'call-2', name: 'shell', arguments: '{"cmd":"pnpm test"}' } },
+      { type: 'response_item', payload: { type: 'function_call_output', call_id: 'call-1', output: 'src' } },
+      { type: 'response_item', payload: { type: 'function_call_output', call_id: 'call-2', output: 'passed' } },
+      { type: 'event_msg', payload: { type: 'agent_message', message: 'Done' } },
+    ])
+
+    expect(events).toEqual([
+      expect.objectContaining({ kind: 'user', turn: 1 }),
+      expect.objectContaining({
+        kind: 'assistant',
+        turn: 1,
+        toolCalls: [
+          { callId: 'call-1', name: 'shell', arguments: '{"cmd":"ls"}' },
+          { callId: 'call-2', name: 'shell', arguments: '{"cmd":"pnpm test"}' },
+        ],
+      }),
+      expect.objectContaining({ kind: 'tool-result', callId: 'call-1' }),
+      expect.objectContaining({ kind: 'tool-result', callId: 'call-2' }),
+      expect.objectContaining({ kind: 'assistant', content: [{ type: 'text', text: 'Done' }] }),
+    ])
+    expect(() => buildDshSeed(events)).not.toThrow()
+  })
+
+  it('parses a Codex custom tool call even when transport records carry different turns', () => {
     const events = parseCodexTranscript([
       { type: 'session_meta', payload: { session_id: 'codex-tool-turn', model_provider: 'openai', model: 'gpt-5' } },
       { type: 'event_msg', payload: { type: 'user_message', message: 'run tests', turn_id: 'user-turn' } },
@@ -459,11 +509,15 @@ describe('native provider semantic transcript parsing', () => {
       { type: 'response_item', payload: { type: 'custom_tool_call_output', call_id: 'call-1', output: 'passed', turn_id: 'user-turn' } },
     ])
 
-    expect(events.map(event => event.turn)).toEqual([1])
+    expect(events).toEqual([
+      expect.objectContaining({ kind: 'user', turn: 1 }),
+      expect.objectContaining({ kind: 'assistant', turn: 1, toolCalls: [{ callId: 'call-1', name: 'shell', arguments: '{"cmd":"pnpm test"}' }] }),
+      expect.objectContaining({ kind: 'tool-result', turn: 1, callId: 'call-1', content: [{ type: 'text', text: 'passed' }] }),
+    ])
     expect(() => buildDshSeed(events)).not.toThrow()
   })
 
-  it('skips a Codex tool exchange whose output is empty', () => {
+  it('omits a Codex tool exchange whose output is empty', () => {
     const events = parseCodexTranscript([
       { type: 'session_meta', payload: { session_id: 'codex-empty-tool-output', model_provider: 'openai', model: 'gpt-5' } },
       { type: 'event_msg', payload: { type: 'user_message', message: 'run the task', turn_id: 'turn-1' } },
@@ -476,7 +530,7 @@ describe('native provider semantic transcript parsing', () => {
     expect(() => buildDshSeed(events)).not.toThrow()
   })
 
-  it('skips a Codex tool exchange whose output is whitespace-only', () => {
+  it('omits a Codex tool exchange whose output is whitespace-only', () => {
     const events = parseCodexTranscript([
       { type: 'session_meta', payload: { session_id: 'codex-whitespace-tool-output', model_provider: 'openai', model: 'gpt-5' } },
       { type: 'event_msg', payload: { type: 'user_message', message: 'run the task', turn_id: 'turn-1' } },

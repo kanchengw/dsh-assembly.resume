@@ -24,7 +24,7 @@ const MAX_PREVIEW_CHARS = 400
 const MAX_TITLE_CHARS = 80
 const DEFAULT_LIMIT = 100
 // Bump when the semantic import contract changes so old seeded sessions are not reused.
-const IMPORT_FINGERPRINT_VERSION = '7'
+const IMPORT_FINGERPRINT_VERSION = '8'
 
 /** Environment and local-store options for the supported native surfaces. */
 export interface ProviderConfig {
@@ -310,9 +310,39 @@ function codexModel(meta: Record<string, unknown> | undefined): { provider: stri
   return { provider, model }
 }
 
+function codexToolArguments(value: unknown): string | undefined {
+  if (typeof value === 'string') return value.trim().length === 0 ? undefined : value
+  if (value === undefined) return undefined
+  const serialized = JSON.stringify(value)
+  return serialized === undefined || serialized.trim().length === 0 ? undefined : serialized
+}
+
+function codexToolCall(payload: Record<string, unknown>): NativeToolCall {
+  const callId = typeof payload['call_id'] === 'string' ? payload['call_id'] : undefined
+  const name = typeof payload['name'] === 'string' ? payload['name'] : undefined
+  const argumentsText = codexToolArguments(payload['type'] === 'custom_tool_call' ? payload['input'] : payload['arguments'])
+  if (callId === undefined || callId.trim().length === 0 || name === undefined || name.trim().length === 0 || argumentsText === undefined) {
+    throw new Error('Codex transcript contains an invalid tool call')
+  }
+  return { callId, name, arguments: argumentsText }
+}
+
+function codexToolResult(payload: Record<string, unknown>): { callId: string; content: NativeContentBlock[]; isError: boolean } {
+  const callId = typeof payload['call_id'] === 'string' ? payload['call_id'] : undefined
+  if (callId === undefined || callId.trim().length === 0) throw new Error('Codex transcript contains an invalid tool result')
+  return { callId, content: nativeContent(payload['output']), isError: payload['is_error'] === true }
+}
+
+interface CodexToolBatch {
+  readonly event: Extract<NativeSemanticEvent, { kind: 'assistant' }>
+  readonly calls: NativeToolCall[]
+}
+
 /** Parse Codex JSONL into model-visible semantic events. */
 export function parseCodexTranscript(rows: readonly unknown[]): NativeSemanticEvent[] {
   const events: NativeSemanticEvent[] = []
+  const pendingToolCalls = new Map<string, CodexToolBatch>()
+  let activeToolBatch: CodexToolBatch | undefined
   let turn = 0
   const meta = record(rows.map(record).find(row => row?.['type'] === 'session_meta')?.['payload'])
   const model = codexModel(meta)
@@ -327,8 +357,13 @@ export function parseCodexTranscript(rows: readonly unknown[]): NativeSemanticEv
       || (row['type'] === 'event_msg' && payload?.['type'] === 'item_completed' && item?.['type'] === 'UserMessage')
     const isAssistant = (row['type'] === 'event_msg' && payload?.['type'] === 'agent_message')
       || (row['type'] === 'response_item' && payload?.['type'] === 'message' && payload['role'] === 'assistant')
-    if (!isUser && !isAssistant) continue
+    const isToolCall = row['type'] === 'response_item'
+      && (payload?.['type'] === 'function_call' || payload?.['type'] === 'custom_tool_call')
+    const isToolResult = row['type'] === 'response_item'
+      && (payload?.['type'] === 'function_call_output' || payload?.['type'] === 'custom_tool_call_output')
+    if (!isUser && !isAssistant && !isToolCall && !isToolResult) continue
     if (isUser || turn < 0) turn += 1
+    if (isUser || isAssistant) activeToolBatch = undefined
     if (row['type'] === 'event_msg' && payload?.['type'] === 'user_message') {
       const content = codexUserContent(payload['message'])
       if (content.length > 0) events.push({ kind: 'user', id: `codex-user-${events.length}`, turn, time: timestamp, content })
@@ -348,11 +383,51 @@ export function parseCodexTranscript(rows: readonly unknown[]): NativeSemanticEv
     if (row['type'] !== 'response_item' || payload === undefined) continue
     const payloadType = payload['type']
     if (payloadType === 'function_call' || payloadType === 'custom_tool_call') {
-      // Native tool invocations are tied to the original Codex runtime and
-      // cannot be resumed safely in DSH; import only visible conversation.
+      const toolCall = codexToolCall(payload)
+      if (pendingToolCalls.has(toolCall.callId)) throw new Error(`Codex transcript contains a duplicate tool call '${toolCall.callId}'`)
+      if (activeToolBatch === undefined || activeToolBatch.event.turn !== turn) {
+        const calls: NativeToolCall[] = []
+        const event: Extract<NativeSemanticEvent, { kind: 'assistant' }> = {
+          kind: 'assistant',
+          id: typeof payload['id'] === 'string' ? payload['id'] : `codex-tool-call-${events.length}`,
+          turn,
+          time: timestamp,
+          content: [],
+          toolCalls: calls,
+          ...model,
+        }
+        activeToolBatch = { event, calls }
+        events.push(event)
+      }
+      activeToolBatch.calls.push(toolCall)
+      pendingToolCalls.set(toolCall.callId, activeToolBatch)
       continue
     }
     if (payloadType === 'function_call_output' || payloadType === 'custom_tool_call_output') {
+      const result = codexToolResult(payload)
+      const batch = pendingToolCalls.get(result.callId)
+      if (batch === undefined) throw new Error(`Codex tool result '${result.callId}' does not match an open tool call`)
+      pendingToolCalls.delete(result.callId)
+      if (result.content.length === 0) {
+        const callIndex = batch.calls.findIndex(call => call.callId === result.callId)
+        if (callIndex >= 0) batch.calls.splice(callIndex, 1)
+        if (batch.calls.length === 0) {
+          const eventIndex = events.indexOf(batch.event)
+          if (eventIndex >= 0) events.splice(eventIndex, 1)
+        }
+        if (![...pendingToolCalls.values()].some(pending => pending === batch)) activeToolBatch = undefined
+        continue
+      }
+      events.push({
+        kind: 'tool-result',
+        id: typeof payload['id'] === 'string' ? payload['id'] : `codex-tool-result-${events.length}`,
+        turn,
+        time: timestamp,
+        callId: result.callId,
+        content: result.content,
+        ...(result.isError ? { isError: true } : {}),
+      })
+      if (![...pendingToolCalls.values()].some(pending => pending === batch)) activeToolBatch = undefined
       continue
     }
     if (payloadType === 'message' && payload['role'] === 'assistant') {
