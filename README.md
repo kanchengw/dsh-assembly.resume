@@ -1,5 +1,7 @@
 # dsh-assembly.resume
 
+Version: `v0.1.0`
+
 Independent DSH plugin for importing local Codex and Claude Code sessions into
 a new DSH Agent conversation.
 
@@ -22,47 +24,22 @@ the DSH Agent.
 - Provides separate Codex, Claude Code CLI, and Claude Code Desktop selectors,
   with project grouping, selection, and takeover actions.
 
-## What It Does Not Do
+## Installation
 
-This package does not invoke `codex resume` or `claude --resume` for later
-prompts, control the native Agent, synchronize native changes after import, or
-orchestrate multiple agents. The native provider remains the read-only source
-of the imported history; DSH owns every turn after takeover.
-`dsh-assembly.bridge` remains a sibling independent component and is not
-required by this package.
+Install from npm:
 
-## Composition
-
-The host must already mount `storage` and `storage-domain`:
-
-```yaml
-- id: session-resume
-  name: 'dsh-assembly.resume'
-  config:
-    autoRecover: true
+```bash
+npm install dsh-assembly.resume
 ```
 
-The bundled `cordis.patch.yml` inserts the same row for profile overlays. `storage-domain` selects the durable backend; this plugin has no `stateDir` or provider-specific file layout.
+Install into a DSH profile:
 
-## Service Flow
+```bash
+dsh plugin --profile web add dsh-assembly.resume
+```
 
-1. The UI or a caller invokes `discover()`.
-2. `takeOver(agent, input)` inspects the selected native transcript and builds a complete DSH seed.
-3. `ctx.agents.create({ sessionId, seed, meta, agentOptions })` publishes the DSH Agent.
-4. The binding is persisted only after the DSH Agent is live.
-5. `open(agent, recordId)` uses `ctx.agents.resume()` after a DSH restart.
-6. The native file remains read-only and is not used for future prompt delivery.
+Then start the profile:
 
-The service also exposes the existing sidecar record/lease storage helpers to
-future assembly components, but they are not the continuation mechanism.
-
-## Standalone Client
-
-The package has two faces in one independently installable artifact:
-
-- Host: `ctx.sessionResume`, provider discovery, native process execution, durable storage, and Remote methods.
-- Client: `dsh-assembly.resume/client`, a card in DSH Settings > Plugins > Plugin configuration, loaded through the DSH client module loader.
-
-Install this package without `dsh-assembly.bridge`. The host profile needs the
-normal DSH `storage-domain` and session-persistence services for durable DSH
-Agent creation/reopen.
+```bash
+dsh web
+```
