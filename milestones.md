@@ -97,24 +97,30 @@ Verification:
 - `pnpm test:artifact`;
 - review of manifest, patch, and README against current DSH conventions.
 
-## Milestone 5: Standalone Resume Surface [superseded]
+## Milestone 5: Standalone Resume Surface [in progress]
+
+This milestone is required. It makes `dsh-assembly.resume` independently
+installable and usable inside DSH without `dsh-assembly.bridge` or a future
+assembly package. Its only continuation path is native-history import followed
+by DSH Agent creation or resume; it must not expose native Agent control,
+native prompt forwarding, or native resume.
 
 Scope:
 
 - Keep `dsh-assembly.bridge` optional and independent.
 - Add provider-neutral discovery, transcript inspection, DSH takeover, DSH reopen, and project-aware navigation.
-- Add the Host Remote contract and browser settings section.
+- Add the Host Remote contract and the browser card in Plugin configuration.
 - Import the complete supported semantic transcript into the DSH seed before the DSH Agent starts.
 
 Acceptance:
 
-- a user can install this bundle alone, discover a Codex or Claude Code session, take it over into DSH, and reopen the DSH-owned conversation;
+- a user can install this bundle alone, discover a Codex, Claude Code CLI, or Claude Code Desktop session, take it over into DSH, and reopen the DSH-owned conversation;
 - provider adapters are private to this component, so the component does not require `dsh-assembly.bridge`;
 - the public feature never forwards a post-takeover prompt to a native CLI.
 
 Verification required after the semantic correction:
 
-- bounded Codex and Claude Code discovery tests over independently-authored JSONL fixtures;
+- bounded Codex, Claude Code CLI, and Claude Code Desktop discovery tests over independently-authored fixtures;
 - complete semantic transcript parser and DSH seed tests;
 - DSH Agent create/reopen tests with native process absence asserted;
 - Host and Client strict TypeScript compilation;

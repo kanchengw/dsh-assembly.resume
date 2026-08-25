@@ -1,31 +1,33 @@
 {
-  "extends": "../../deepseek-harness-latest/tsconfig.base.client.json",
+  "extends": "../../deepseek-harness/tsconfig.base.client.json",
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "lib/types",
     "paths": {
-      "@deepseek-ai/cordis": ["../../deepseek-harness-latest/vendor/cordis/src"],
-      "@deepseek-ai/dsh-api-remotes/*": ["../../deepseek-harness-latest/packages/api/remotes/src/*"],
-      "@deepseek-ai/dsh-api-remotes": ["../../deepseek-harness-latest/packages/api/remotes/src"],
-      "@deepseek-ai/dsh-client-runtime/client": ["../../deepseek-harness-latest/packages/client/runtime/src/client"],
-      "@deepseek-ai/dsh-client-locale/client": ["../../deepseek-harness-latest/packages/client/locale/src/client"],
-      "@deepseek-ai/dsh-client-ui-settings/client": ["../../deepseek-harness-latest/packages/client/ui-settings/src/client"],
-      "@deepseek-ai/dsh-client-ui-slots/client": ["../../deepseek-harness-latest/packages/client/ui-slots/src/client"],
-      "@deepseek-ai/dsh-client-ui-slots": ["../../deepseek-harness-latest/packages/client/ui-slots/src"],
-      "@deepseek-ai/dsh-session/types": ["../../deepseek-harness-latest/packages/core/session/src/types"],
-      "@deepseek-ai/dsh-typert-protocol": ["../../deepseek-harness-latest/packages/typert/protocol/src"],
-      "@deepseek-ai/dsh-llm": ["../../deepseek-harness-latest/packages/llm/llm/src"]
+      "@deepseek-ai/cordis": ["../../deepseek-harness/vendor/cordis/src"],
+      "@deepseek-ai/dsh-api-remotes/*": ["../../deepseek-harness/packages/api/remotes/src/*"],
+      "@deepseek-ai/dsh-api-remotes": ["../../deepseek-harness/packages/api/remotes/src"],
+      "@deepseek-ai/dsh-client-runtime/client": ["../../deepseek-harness/packages/client/runtime/src/client"],
+      "@deepseek-ai/dsh-client-locale/client": ["../../deepseek-harness/packages/client/locale/src/client"],
+      "@deepseek-ai/dsh-client-ui-settings/client": ["../../deepseek-harness/packages/client/ui-settings/src/client"],
+      "@deepseek-ai/dsh-client-ui-settings-plugins/client": ["../../deepseek-harness/packages/client/ui-settings-plugins/src/client"],
+      "@deepseek-ai/dsh-client-ui-slots/client": ["../../deepseek-harness/packages/client/ui-slots/src/client"],
+      "@deepseek-ai/dsh-client-ui-slots": ["../../deepseek-harness/packages/client/ui-slots/src"],
+      "@deepseek-ai/dsh-session/types": ["../../deepseek-harness/packages/core/session/src/types"],
+      "@deepseek-ai/dsh-typert-protocol": ["../../deepseek-harness/packages/typert/protocol/src"],
+      "@deepseek-ai/dsh-llm": ["../../deepseek-harness/packages/llm/llm/src"]
     }
   },
   "include": ["src/client", "src/client-env.d.ts", "src/remote.ts", "src/types.ts", "src/transcript.ts"],
   "references": [
-    { "path": "../../deepseek-harness-latest/vendor/cordis" },
-    { "path": "../../deepseek-harness-latest/packages/api/remotes/tsconfig.client.json" },
-    { "path": "../../deepseek-harness-latest/packages/client/runtime" },
-    { "path": "../../deepseek-harness-latest/packages/client/locale" },
-    { "path": "../../deepseek-harness-latest/packages/client/ui-settings" },
-    { "path": "../../deepseek-harness-latest/packages/client/ui-slots" },
-    { "path": "../../deepseek-harness-latest/packages/core/session" },
-    { "path": "../../deepseek-harness-latest/packages/typert/protocol" }
+    { "path": "../../deepseek-harness/vendor/cordis" },
+    { "path": "../../deepseek-harness/packages/api/remotes/tsconfig.client.json" },
+    { "path": "../../deepseek-harness/packages/client/runtime" },
+    { "path": "../../deepseek-harness/packages/client/locale" },
+    { "path": "../../deepseek-harness/packages/client/ui-settings" },
+    { "path": "../../deepseek-harness/packages/client/ui-settings-plugins" },
+    { "path": "../../deepseek-harness/packages/client/ui-slots" },
+    { "path": "../../deepseek-harness/packages/core/session" },
+    { "path": "../../deepseek-harness/packages/typert/protocol" }
   ]
 }

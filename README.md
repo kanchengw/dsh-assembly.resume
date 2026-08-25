@@ -16,8 +16,11 @@ the DSH Agent.
 - Reopens the DSH Agent with `ctx.agents.resume()`; it never starts a native CLI.
 - Discovers Codex sessions from `CODEX_HOME` or `~/.codex/sessions`.
 - Discovers Claude Code sessions from `CLAUDE_CONFIG_DIR` or `~/.claude/projects`.
+- Discovers Claude Code Desktop metadata from its official `claude-code-sessions`
+  store and follows `cliSessionId` to the matching local Claude transcript.
 - Imports user/assistant/tool semantic events with provider/model provenance.
-- Provides a UI with CODEX/CC tabs, project grouping, new-chat grouping, selection, and takeover actions.
+- Provides separate Codex, Claude Code CLI, and Claude Code Desktop selectors,
+  with project grouping, selection, and takeover actions.
 
 ## What It Does Not Do
 
@@ -58,7 +61,7 @@ future assembly components, but they are not the continuation mechanism.
 The package has two faces in one independently installable artifact:
 
 - Host: `ctx.sessionResume`, provider discovery, native process execution, durable storage, and Remote methods.
-- Client: `dsh-assembly.resume/client`, a tab under DSH's native Settings > Plugins page, loaded through the DSH client module loader.
+- Client: `dsh-assembly.resume/client`, a card in DSH Settings > Plugins > Plugin configuration, loaded through the DSH client module loader.
 
 Install this package without `dsh-assembly.bridge`. The host profile needs the
 normal DSH `storage-domain` and session-persistence services for durable DSH

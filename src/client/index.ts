@@ -5,10 +5,11 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {} from '../remote.ts'
 import { TYPERT_REMOTE, type SessionResumeRemote } from '../remote.ts'
 import type { ExternalProvider, DiscoveredExternalSession, TakeOverResult } from '../types.ts'
-import { ResumeSettingsSection, useCurrentSession } from './ResumeSettingsSection.tsx'
+import { ResumeSettingsSection } from './ResumeSettingsSection.tsx'
 import { en, zh } from './locales.ts'
 import { getSessionResumeRemote } from './remote-access.ts'
 import { openDshTargetSession } from './workspace-target.ts'
@@ -24,21 +25,20 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Services required by the independent browser half. */
 export const inject = ['slots', 'locale', 'remote', 'sessions', 'workspaces']
 
-function createSectionProps(ctx: ClientContext, sessionId: SessionId | undefined) {
+function createSectionProps(ctx: ClientContext) {
   const remote = (): SessionResumeRemote => getSessionResumeRemote(ctx)
-  const sessions = ctx.get('sessions') as unknown as ISessions & {
+  const sessions = ctx.get('sessions') as unknown as Pick<ISessions, 'open'> & {
     create(options: { workspaceId?: string; sessionId?: SessionId }): Promise<SessionId>
   }
   const workspaces = ctx.get('workspaces') as IWorkspaces
   return {
-    currentSession: sessionId,
     discover: async (input: { provider: ExternalProvider; query?: string }): Promise<DiscoveredExternalSession[]> => {
       const result = await remote().discover(input)
       if (!result.ok) throw new Error(result.error.message)
       return [...result.value]
     },
-    takeOver: async (id: SessionId, input: { provider: ExternalProvider; externalSessionId: string }): Promise<TakeOverResult> => {
-      const result = await remote().takeOver(id, { ...input, externalSessionId: input.externalSessionId as never })
+    takeOver: async (input: { provider: ExternalProvider; externalSessionId: string }): Promise<TakeOverResult> => {
+      const result = await remote().takeOverStandalone({ ...input, externalSessionId: input.externalSessionId as never })
       if (!result.ok) throw new Error(result.error.message)
       return result.value
     },
@@ -48,24 +48,20 @@ function createSectionProps(ctx: ClientContext, sessionId: SessionId | undefined
   }
 }
 
-/** Mount the Remote contribution and register the native-session Plugins tab. */
+/** Mount the Remote contribution and register the native-session Plugins card. */
 export async function apply(ctx: ClientContext): Promise<() => Promise<void>> {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'session-resume: dictionaries')
   const disposeRemote = await ctx.remote.$mount(TYPERT_REMOTE)
-  const t = ctx.locale.bind(NS)
-  function SectionHost(props: PropsRuntime<'settings.plugins.tab'> & PropsLocale<'sessionResume'>) {
-    const sessionId = useCurrentSession(ctx)
-    return createElement(ResumeSettingsSection, { ...props, ...createSectionProps(ctx, sessionId) })
+  function ResumeCard(props: PropsRuntime<'settings.plugin.item'> & PropsLocale<'sessionResume'>) {
+    return createElement(ResumeSettingsSection, { ...props, ...createSectionProps(ctx) })
   }
 
-  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
-    name: 'settings.plugins.tab',
-    id: 'session-resume',
-    order: 20,
-    label: () => t('nav'),
+  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
+    name: 'settings.plugin.item',
+    key: 'session-resume',
     locale: NS,
-    inject: () => createSectionProps(ctx, undefined),
-  }, SectionHost))
+    inject: () => createSectionProps(ctx),
+  }, ResumeCard))
   return disposeRemote
 }
 

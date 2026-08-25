@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config'
 import { resolve } from 'node:path'
 import ts from 'typescript'
 
-const dshRoot = resolve('..', '..', 'deepseek-harness-latest')
+const dshRoot = resolve('..', '..', 'deepseek-harness')
 const decoratorSyntax = /^\s*@[A-Za-z_$][\w$]*/m
 
 function standardDecoratorPlugin() {

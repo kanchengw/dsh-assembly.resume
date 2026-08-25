@@ -44,18 +44,33 @@ describe('external session DSH target', () => {
     expect(open).toHaveBeenCalledWith('session-project')
   })
 
-  it('reuses an existing project case-insensitively without creating another one', async () => {
+  it('reuses an existing project with the exact native path without creating another one', async () => {
     const open = vi.fn()
     const create = vi.fn()
     const sessionCreate = vi.fn(async () => 'session-existing' as never)
     const result = await openDshTargetSession({
-      list: { getSnapshot: () => ({ items: [workspace('E:/Projects/Demo', 'w-existing')] }) },
+      list: { getSnapshot: () => ({ items: [workspace('E:\\projects\\demo', 'w-existing')] }) },
       create,
-    }, { open, create: sessionCreate }, 'session-existing' as never, 'e:\\projects\\demo')
+    }, { open, create: sessionCreate }, 'session-existing' as never, 'E:\\projects\\demo')
 
     expect(result).toBe('session-existing')
     expect(create).not.toHaveBeenCalled()
     expect(sessionCreate).toHaveBeenCalledWith({ workspaceId: 'w-existing', sessionId: 'session-existing' })
     expect(open).toHaveBeenCalledWith('session-existing')
+  })
+
+  it('opens an ungrouped takeover when the matching Windows workspace has different path casing', async () => {
+    const open = vi.fn()
+    const create = vi.fn()
+    const sessionCreate = vi.fn()
+    const result = await openDshTargetSession({
+      list: { getSnapshot: () => ({ items: [workspace('C:\\Windows\\System32', 'w-system32')] }) },
+      create,
+    }, { open, create: sessionCreate }, 'session-case-mismatch' as never, 'C:\\WINDOWS\\System32')
+
+    expect(result).toBe('session-case-mismatch')
+    expect(create).not.toHaveBeenCalled()
+    expect(sessionCreate).not.toHaveBeenCalled()
+    expect(open).toHaveBeenCalledWith('session-case-mismatch')
   })
 })

@@ -9,53 +9,59 @@ importers:
   .:
     devDependencies:
       '@deepseek-ai/cordis':
-        specifier: link:../../deepseek-harness-latest/vendor/cordis
-        version: link:../../deepseek-harness-latest/vendor/cordis
+        specifier: link:../../deepseek-harness/vendor/cordis
+        version: link:../../deepseek-harness/vendor/cordis
       '@deepseek-ai/dsh-agent':
-        specifier: link:../../deepseek-harness-latest/packages/core/agent
-        version: link:../../deepseek-harness-latest/packages/core/agent
+        specifier: link:../../deepseek-harness/packages/core/agent
+        version: link:../../deepseek-harness/packages/core/agent
       '@deepseek-ai/dsh-api-remotes':
-        specifier: link:../../deepseek-harness-latest/packages/api/remotes
-        version: link:../../deepseek-harness-latest/packages/api/remotes
+        specifier: link:../../deepseek-harness/packages/api/remotes
+        version: link:../../deepseek-harness/packages/api/remotes
       '@deepseek-ai/dsh-brand':
-        specifier: link:../../deepseek-harness-latest/packages/util/brand
-        version: link:../../deepseek-harness-latest/packages/util/brand
+        specifier: link:../../deepseek-harness/packages/util/brand
+        version: link:../../deepseek-harness/packages/util/brand
       '@deepseek-ai/dsh-client-locale':
-        specifier: link:../../deepseek-harness-latest/packages/client/locale
-        version: link:../../deepseek-harness-latest/packages/client/locale
+        specifier: link:../../deepseek-harness/packages/client/locale
+        version: link:../../deepseek-harness/packages/client/locale
       '@deepseek-ai/dsh-client-runtime':
-        specifier: link:../../deepseek-harness-latest/packages/client/runtime
-        version: link:../../deepseek-harness-latest/packages/client/runtime
+        specifier: link:../../deepseek-harness/packages/client/runtime
+        version: link:../../deepseek-harness/packages/client/runtime
       '@deepseek-ai/dsh-client-ui-settings':
-        specifier: link:../../deepseek-harness-latest/packages/client/ui-settings
-        version: link:../../deepseek-harness-latest/packages/client/ui-settings
+        specifier: link:../../deepseek-harness/packages/client/ui-settings
+        version: link:../../deepseek-harness/packages/client/ui-settings
+      '@deepseek-ai/dsh-client-ui-settings-plugins':
+        specifier: link:../../deepseek-harness/packages/client/ui-settings-plugins
+        version: link:../../deepseek-harness/packages/client/ui-settings-plugins
       '@deepseek-ai/dsh-client-ui-slots':
-        specifier: link:../../deepseek-harness-latest/packages/client/ui-slots
-        version: link:../../deepseek-harness-latest/packages/client/ui-slots
+        specifier: link:../../deepseek-harness/packages/client/ui-slots
+        version: link:../../deepseek-harness/packages/client/ui-slots
       '@deepseek-ai/dsh-invariants':
-        specifier: link:../../deepseek-harness-latest/packages/runtime-diagnostics/invariants
-        version: link:../../deepseek-harness-latest/packages/runtime-diagnostics/invariants
+        specifier: link:../../deepseek-harness/packages/runtime-diagnostics/invariants
+        version: link:../../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
-        specifier: link:../../deepseek-harness-latest/packages/llm/llm
-        version: link:../../deepseek-harness-latest/packages/llm/llm
+        specifier: link:../../deepseek-harness/packages/llm/llm
+        version: link:../../deepseek-harness/packages/llm/llm
       '@deepseek-ai/dsh-session':
-        specifier: link:../../deepseek-harness-latest/packages/core/session
-        version: link:../../deepseek-harness-latest/packages/core/session
+        specifier: link:../../deepseek-harness/packages/core/session
+        version: link:../../deepseek-harness/packages/core/session
       '@deepseek-ai/dsh-session-persistence':
-        specifier: link:../../deepseek-harness-latest/packages/session/session-persistence
-        version: link:../../deepseek-harness-latest/packages/session/session-persistence
+        specifier: link:../../deepseek-harness/packages/session/session-persistence
+        version: link:../../deepseek-harness/packages/session/session-persistence
+      '@deepseek-ai/dsh-settings':
+        specifier: link:../../deepseek-harness/packages/settings/settings
+        version: link:../../deepseek-harness/packages/settings/settings
       '@deepseek-ai/dsh-storage':
-        specifier: link:../../deepseek-harness-latest/packages/storage/storage
-        version: link:../../deepseek-harness-latest/packages/storage/storage
+        specifier: link:../../deepseek-harness/packages/storage/storage
+        version: link:../../deepseek-harness/packages/storage/storage
       '@deepseek-ai/dsh-storage-domain':
-        specifier: link:../../deepseek-harness-latest/packages/storage/storage-domain
-        version: link:../../deepseek-harness-latest/packages/storage/storage-domain
+        specifier: link:../../deepseek-harness/packages/storage/storage-domain
+        version: link:../../deepseek-harness/packages/storage/storage-domain
       '@deepseek-ai/dsh-typert-protocol':
-        specifier: link:../../deepseek-harness-latest/packages/typert/protocol
-        version: link:../../deepseek-harness-latest/packages/typert/protocol
+        specifier: link:../../deepseek-harness/packages/typert/protocol
+        version: link:../../deepseek-harness/packages/typert/protocol
       '@deepseek-ai/schemastery':
-        specifier: link:../../deepseek-harness-latest/vendor/schemastery
-        version: link:../../deepseek-harness-latest/vendor/schemastery
+        specifier: link:../../deepseek-harness/vendor/schemastery
+        version: link:../../deepseek-harness/vendor/schemastery
       '@types/node':
         specifier: ^22.20.0
         version: 22.20.1

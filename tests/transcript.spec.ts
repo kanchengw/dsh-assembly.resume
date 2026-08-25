@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { buildDshSeed, type NativeSemanticEvent, type NativeToolCall } from '../src/transcript.ts'
 
-const user = (id: string, text: string, turn = 0): NativeSemanticEvent => ({
+const user = (id: string, text: string, turn = 1): NativeSemanticEvent => ({
   kind: 'user', id, turn, time: 1, content: [{ type: 'text', text }],
 })
 
-const assistant = (id: string, text: string, turn = 0, toolCalls?: readonly NativeToolCall[]): NativeSemanticEvent => ({
+const assistant = (id: string, text: string, turn = 1, toolCalls?: readonly NativeToolCall[]): NativeSemanticEvent => ({
   kind: 'assistant', id, turn, time: 2, content: [{ type: 'text', text }], provider: 'codex-native', model: 'codex-model',
   ...(toolCalls === undefined ? {} : { toolCalls }),
 })
@@ -25,8 +25,8 @@ describe('buildDshSeed', () => {
   it('keeps a native tool call and result in the same completed turn', () => {
     const seed = buildDshSeed([
       user('u1', 'run the check'),
-      assistant('a1', 'I will run it', 0, [{ callId: 'call-1', name: 'shell', arguments: '{"cmd":"pnpm test"}' }]),
-      { kind: 'tool-result', id: 'r1', turn: 0, time: 3, callId: 'call-1', content: [{ type: 'text', text: 'passed' }] },
+      assistant('a1', 'I will run it', 1, [{ callId: 'call-1', name: 'shell', arguments: '{"cmd":"pnpm test"}' }]),
+      { kind: 'tool-result', id: 'r1', turn: 1, time: 3, callId: 'call-1', content: [{ type: 'text', text: 'passed' }] },
       assistant('a2', 'The check passed'),
     ])
 
@@ -41,8 +41,8 @@ describe('buildDshSeed', () => {
   it('allows a tool-only assistant message when the native provider has no visible text', () => {
     const seed = buildDshSeed([
       user('u1', 'run it'),
-      { kind: 'assistant', id: 'a1', turn: 0, time: 2, content: [], provider: 'codex-native', model: 'codex-model', toolCalls: [{ callId: 'call-1', name: 'shell', arguments: '{}' }] },
-      { kind: 'tool-result', id: 'r1', turn: 0, time: 3, callId: 'call-1', content: [{ type: 'text', text: 'done' }] },
+      { kind: 'assistant', id: 'a1', turn: 1, time: 2, content: [], provider: 'codex-native', model: 'codex-model', toolCalls: [{ callId: 'call-1', name: 'shell', arguments: '{}' }] },
+      { kind: 'tool-result', id: 'r1', turn: 1, time: 3, callId: 'call-1', content: [{ type: 'text', text: 'done' }] },
     ])
 
     expect(seed).toHaveLength(8)
@@ -52,8 +52,8 @@ describe('buildDshSeed', () => {
   it('produces a seed accepted by the current DSH Session boundary', () => {
     const seed = buildDshSeed([
       user('u1', 'run it'),
-      assistant('a1', 'running', 0, [{ callId: 'call-1', name: 'shell', arguments: '{}' }]),
-      { kind: 'tool-result', id: 'r1', turn: 0, time: 3, callId: 'call-1', content: [{ type: 'text', text: 'done' }] },
+      assistant('a1', 'running', 1, [{ callId: 'call-1', name: 'shell', arguments: '{}' }]),
+      { kind: 'tool-result', id: 'r1', turn: 1, time: 3, callId: 'call-1', content: [{ type: 'text', text: 'done' }] },
       assistant('a2', 'finished'),
     ])
 
@@ -63,25 +63,29 @@ describe('buildDshSeed', () => {
   it('rejects an unpaired native tool result', () => {
     expect(() => buildDshSeed([
       user('u1', 'run it'),
-      { kind: 'tool-result', id: 'r1', turn: 0, time: 2, callId: 'missing', content: [{ type: 'text', text: 'no call' }] },
+      { kind: 'tool-result', id: 'r1', turn: 1, time: 2, callId: 'missing', content: [{ type: 'text', text: 'no call' }] },
     ])).toThrow(/does not match an open tool call/)
   })
 
   it('rejects a native assistant turn with an unpaired tool call', () => {
     expect(() => buildDshSeed([
       user('u1', 'run it'),
-      assistant('a1', 'running', 0, [{ callId: 'call-1', name: 'shell', arguments: '{}' }]),
+      assistant('a1', 'running', 1, [{ callId: 'call-1', name: 'shell', arguments: '{}' }]),
     ])).toThrow(/unpaired tool calls/)
   })
 
   it('rejects assistant history without provider/model provenance', () => {
     expect(() => buildDshSeed([
       user('u1', 'hello'),
-      { kind: 'assistant', id: 'a1', turn: 0, time: 2, content: [{ type: 'text', text: 'hi' }], provider: '', model: 'model' },
+      { kind: 'assistant', id: 'a1', turn: 1, time: 2, content: [{ type: 'text', text: 'hi' }], provider: '', model: 'model' },
     ])).toThrow(/provider must be non-blank/)
   })
 
   it('rejects a native transcript whose turns move backwards', () => {
     expect(() => buildDshSeed([user('u1', 'first', 1), assistant('a1', 'answer', 0)])).toThrow(/non-decreasing order/)
+  })
+
+  it('rejects zero-based turns before persistence rejects the seed as legacy data', () => {
+    expect(() => buildDshSeed([user('u1', 'first', 0), assistant('a1', 'answer', 0)])).toThrow(/start at 1/)
   })
 })

@@ -23,17 +23,18 @@
     "noUnusedParameters": true,
     "types": ["node"],
     "paths": {
-      "@deepseek-ai/cordis": ["../../deepseek-harness-latest/vendor/cordis/src"],
-      "@deepseek-ai/dsh-agent": ["../../deepseek-harness-latest/packages/core/agent/src"],
-      "@deepseek-ai/dsh-brand": ["../../deepseek-harness-latest/packages/util/brand/src"],
-      "@deepseek-ai/dsh-invariants": ["../../deepseek-harness-latest/packages/runtime-diagnostics/invariants/src"],
-      "@deepseek-ai/dsh-llm": ["../../deepseek-harness-latest/packages/llm/llm/src"],
-      "@deepseek-ai/dsh-session": ["../../deepseek-harness-latest/packages/core/session/src"],
-      "@deepseek-ai/dsh-session/*": ["../../deepseek-harness-latest/packages/core/session/src/*"],
-      "@deepseek-ai/dsh-storage": ["../../deepseek-harness-latest/packages/storage/storage/src"],
-      "@deepseek-ai/dsh-storage-domain": ["../../deepseek-harness-latest/packages/storage/storage-domain/src"],
-      "@deepseek-ai/dsh-typert-protocol": ["../../deepseek-harness-latest/packages/typert/protocol/src"],
-      "@deepseek-ai/schemastery": ["../../deepseek-harness-latest/vendor/schemastery/src"]
+      "@deepseek-ai/cordis": ["../../deepseek-harness/vendor/cordis/src"],
+      "@deepseek-ai/dsh-agent": ["../../deepseek-harness/packages/core/agent/src"],
+      "@deepseek-ai/dsh-brand": ["../../deepseek-harness/packages/util/brand/src"],
+      "@deepseek-ai/dsh-invariants": ["../../deepseek-harness/packages/runtime-diagnostics/invariants/src"],
+      "@deepseek-ai/dsh-llm": ["../../deepseek-harness/packages/llm/llm/src"],
+      "@deepseek-ai/dsh-session": ["../../deepseek-harness/packages/core/session/src"],
+      "@deepseek-ai/dsh-session/*": ["../../deepseek-harness/packages/core/session/src/*"],
+      "@deepseek-ai/dsh-settings": ["../../deepseek-harness/packages/settings/settings/src"],
+      "@deepseek-ai/dsh-storage": ["../../deepseek-harness/packages/storage/storage/src"],
+      "@deepseek-ai/dsh-storage-domain": ["../../deepseek-harness/packages/storage/storage-domain/src"],
+      "@deepseek-ai/dsh-typert-protocol": ["../../deepseek-harness/packages/typert/protocol/src"],
+      "@deepseek-ai/schemastery": ["../../deepseek-harness/vendor/schemastery/src"]
     }
   },
   "include": [
@@ -49,15 +50,16 @@
     "src/typert.remote-client.ts"
   ],
   "references": [
-    { "path": "../../deepseek-harness-latest/vendor/cordis" },
-    { "path": "../../deepseek-harness-latest/packages/core/agent" },
-    { "path": "../../deepseek-harness-latest/vendor/schemastery" },
-    { "path": "../../deepseek-harness-latest/packages/util/brand" },
-    { "path": "../../deepseek-harness-latest/packages/runtime-diagnostics/invariants" },
-    { "path": "../../deepseek-harness-latest/packages/core/session" },
-    { "path": "../../deepseek-harness-latest/packages/llm/llm" },
-    { "path": "../../deepseek-harness-latest/packages/storage/storage" },
-    { "path": "../../deepseek-harness-latest/packages/storage/storage-domain" },
-    { "path": "../../deepseek-harness-latest/packages/typert/protocol" }
+    { "path": "../../deepseek-harness/vendor/cordis" },
+    { "path": "../../deepseek-harness/packages/core/agent" },
+    { "path": "../../deepseek-harness/vendor/schemastery" },
+    { "path": "../../deepseek-harness/packages/util/brand" },
+    { "path": "../../deepseek-harness/packages/runtime-diagnostics/invariants" },
+    { "path": "../../deepseek-harness/packages/core/session" },
+    { "path": "../../deepseek-harness/packages/settings/settings" },
+    { "path": "../../deepseek-harness/packages/llm/llm" },
+    { "path": "../../deepseek-harness/packages/storage/storage" },
+    { "path": "../../deepseek-harness/packages/storage/storage-domain" },
+    { "path": "../../deepseek-harness/packages/typert/protocol" }
   ]
 }

@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Storage from '@deepseek-ai/dsh-storage'
 import { storageBackendServiceKey } from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
-import SessionResumeService from '../src/index.ts'
-import { MemoryBackend } from './helpers.ts'
+import SessionResumeService, { SESSION_RESUME_SETTINGS_NAMESPACE } from '../src/index.ts'
+import { FakeDshAgentRuntime, MemoryBackend } from './helpers.ts'
 
 const contexts: Context[] = []
 
@@ -21,11 +21,15 @@ describe('host composition', () => {
     ctx.storage.backend.register('memory', backend)
     ctx.provide(storageBackendServiceKey('memory'), backend)
     await ctx.plugin(StorageDomain, { backend: 'memory' })
+    ctx.provide('agents', new FakeDshAgentRuntime() as never)
+    const registerSettingsNamespace = vi.fn()
+    ctx.provide('settings', { register: registerSettingsNamespace } as never)
     await ctx.plugin(SessionResumeService)
 
     expect(ctx.sessionResume).toBeInstanceOf(SessionResumeService)
     await expect(ctx.sessionResume.find()).resolves.toEqual([])
     expect(backend.units.has('session_resume')).toBe(true)
+    expect(registerSettingsNamespace).toHaveBeenCalledWith(SESSION_RESUME_SETTINGS_NAMESPACE, expect.any(Function))
   })
 
   it('rejects a malformed durable row when the domain is reopened', async () => {
@@ -36,6 +40,7 @@ describe('host composition', () => {
     first.storage.backend.register('memory', backend)
     first.provide(storageBackendServiceKey('memory'), backend)
     await first.plugin(StorageDomain, { backend: 'memory' })
+    first.provide('agents', new FakeDshAgentRuntime() as never)
     await first.plugin(SessionResumeService)
     await first.fiber.dispose()
     contexts.splice(contexts.indexOf(first), 1)
@@ -58,6 +63,7 @@ describe('host composition', () => {
     second.storage.backend.register('memory', backend)
     second.provide(storageBackendServiceKey('memory'), backend)
     await second.plugin(StorageDomain, { backend: 'memory' })
+    second.provide('agents', new FakeDshAgentRuntime() as never)
     await expect(second.plugin(SessionResumeService)).rejects.toMatchObject({
       code: 'invalid-record',
     })

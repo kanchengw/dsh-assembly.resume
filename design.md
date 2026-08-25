@@ -88,7 +88,7 @@ The public types are provider-neutral; `provider` is a discriminant only.
 Provider-specific parser details stay behind adapters.
 
 ```ts
-type ResumeProvider = 'codex' | 'claude-code'
+type ResumeProvider = 'codex' | 'claude-code' | 'claude-code-desktop'
 
 interface NativeSessionSummary {
   provider: ResumeProvider
@@ -345,20 +345,20 @@ Recovery rules:
 
 The settings/remote surface must expose:
 
-- provider selector: Codex or Claude Code;
+- provider selector: Codex, Claude Code CLI, or Claude Code Desktop;
 - grouped native session list by project and new-chat scope;
 - native title, updated time, and project path only where meaningful;
 - selection details and an explicit "take over in DSH" action;
 - loading, parse failure, unsupported transcript, and already-imported states;
 - navigation to the resulting DSH workspace/session.
 
-The client contribution is registered under DSH's native `settings.plugins.tab`
-slot with id `session-resume`, so the feature appears as a tab inside Settings
-> Plugins. It does not register `settings.section`, which would create a
-separate top-level Settings navigation row. It also does not register
-`settings.plugin.item`: that slot is for plugins that expose an editable Host
-settings namespace, while resume owns a functional session-takeover surface
-rather than a settings namespace.
+The client contribution is registered as a DSH `settings.plugin.item` card
+with key `session-resume`, placing it in Settings > Plugins > Plugin
+configuration after the built-in configuration cards. The Host registers the
+same zero-field settings namespace because that screen dispatches only cards
+whose namespaces the Host serves. It does not register `settings.section` or
+`settings.plugins.tab`: those slots respectively create a root Settings
+navigation entry and a Plugins top tab.
 
 After the action succeeds, the plugin does not render a native-provider
 prompt box. The user is in a normal DSH conversation whose history starts

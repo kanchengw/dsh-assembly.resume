@@ -23,6 +23,7 @@ async function mount(codexHome: string): Promise<{ ctx: Context; runtime: FakeDs
   ctx.provide(storageBackendServiceKey('memory'), backend)
   await ctx.plugin(StorageDomain, { backend: 'memory' })
   const runtime = new FakeDshAgentRuntime()
+  ctx.provide('agents', runtime as never)
   await ctx.plugin(SessionResumeService, { providers: { codexHome } })
   return { ctx, runtime }
 }
@@ -73,11 +74,26 @@ describe('DSH takeover', () => {
     expect(runtime.resumed).toHaveLength(0)
   })
 
+  it('starts a DSH session directly from the standalone resume surface', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-standalone-'))
+    await createCodexSession(root)
+    const { ctx, runtime } = await mount(root)
+
+    const result = await ctx.sessionResume.takeOverStandalone({
+      provider: 'codex',
+      externalSessionId: 'native-1' as never,
+    })
+
+    expect(result.reused).toBe(false)
+    expect(runtime.created).toHaveLength(1)
+    expect(runtime.created[0]?.sessionId).toBe(result.dshSessionId)
+  })
+
   it('reuses the same DSH session for the same native source fingerprint', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-resume-idempotent-'))
     await createCodexSession(root)
     const { ctx, runtime } = await mount(root)
-    const controller = runtime.controller('controller')
+    const controller = runtime.controller('controller', { provider: 'mock', model: 'mock' })
     const input = { provider: 'codex' as const, externalSessionId: 'native-1' as never }
 
     const first = await ctx.sessionResume.takeOver(controller, input)
@@ -92,7 +108,7 @@ describe('DSH takeover', () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-resume-open-'))
     await createCodexSession(root)
     const { ctx, runtime } = await mount(root)
-    const controller = runtime.controller('controller')
+    const controller = runtime.controller('controller', { provider: 'mock', model: 'mock' })
     const first = await ctx.sessionResume.takeOver(controller, {
       provider: 'codex',
       externalSessionId: 'native-1' as never,
@@ -103,6 +119,6 @@ describe('DSH takeover', () => {
 
     expect(reopened).toMatchObject({ reused: true, dshSessionId: first.dshSessionId })
     expect(runtime.resumed).toHaveLength(1)
-    expect(runtime.resumed[0]?.resumeSessionId).toBe(first.dshSessionId)
+    expect(runtime.resumed[0]).toMatchObject({ resumeSessionId: first.dshSessionId, agentOptions: { provider: 'mock', model: 'mock' } })
   })
 })

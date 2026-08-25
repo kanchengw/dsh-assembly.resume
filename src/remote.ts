@@ -20,7 +20,7 @@ const json = (typeSymbol: string, schema: { parse(value: unknown): unknown }) =>
   schema,
 })
 
-const provider = z.union([z.literal('codex'), z.literal('claude-code')])
+const provider = z.union([z.literal('codex'), z.literal('claude-code'), z.literal('claude-code-desktop')])
 const discovered = z.object({
   provider,
   externalSessionId: z.string(),
@@ -63,6 +63,12 @@ const descriptors: readonly InvocationDescriptor[] = [
     parameters: [{ name: 'input', wire: 'input', source: 'json', codec: json('dsh-assembly.resume#DiscoverExternalSessionsInput', discoverInput) }],
     result: json('dsh-assembly.resume#DiscoveredExternalSession[]', z.array(discovered)),
   },
+  {
+    id: 'dsh-assembly.resume#sessionResume/takeOverStandalone', service: 'sessionResume', namespace: 'sessionResume', method: 'takeOverStandalone',
+    invocation: { kind: 'direct' },
+    parameters: [{ name: 'input', wire: 'input', source: 'json', codec: json('dsh-assembly.resume#TakeOverExternalSessionInput', takeoverInput) }],
+    result: json('dsh-assembly.resume#TakeOverResult', takeoverResult),
+  },
   scopeDescriptor('takeOver', [
     { name: 'agent', wire: 'agentId', source: 'lookup', lookup: 'agent', codec: agentId },
     { name: 'input', wire: 'input', source: 'json', codec: json('dsh-assembly.resume#TakeOverExternalSessionInput', takeoverInput) },
@@ -88,6 +94,7 @@ export const TYPERT_REMOTE: TypertRemoteContribution = {
 
 export type SessionResumeRemote = {
   discover(input: DiscoverExternalSessionsInput): Promise<RemoteResult<readonly DiscoveredExternalSession[]>>
+  takeOverStandalone(input: TakeOverExternalSessionInput): Promise<RemoteResult<TakeOverResult>>
   takeOver(agentId: SessionId, input: TakeOverExternalSessionInput): Promise<RemoteResult<TakeOverResult>>
   open(agentId: SessionId, recordId: ExternalSessionRecordId): Promise<RemoteResult<TakeOverResult>>
   list(agentId: SessionId): Promise<RemoteResult<readonly ExternalSessionRecord[]>>
@@ -97,6 +104,7 @@ export type SessionResumeRemote = {
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteMap {
     'sessionResume/discover': SessionResumeRemote['discover']
+    'sessionResume/takeOverStandalone': SessionResumeRemote['takeOverStandalone']
     'sessionResume/takeOver': SessionResumeRemote['takeOver']
     'sessionResume/open': SessionResumeRemote['open']
     'sessionResume/list': SessionResumeRemote['list']

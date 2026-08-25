@@ -4,7 +4,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { NativeSemanticEvent } from './transcript.ts'
 
 /** Native coding-agent products supported by the first standalone release. */
-export type ExternalProvider = 'codex' | 'claude-code'
+export type ExternalProvider = 'codex' | 'claude-code' | 'claude-code-desktop'
 
 /** Opaque native session identifier owned by an external provider. */
 export type ExternalSessionId = Branded<'ExternalSessionId'>
@@ -151,6 +151,8 @@ export interface ExternalSessionUpdate {
 export interface ExternalSessionResumeService {
   discover(input?: DiscoverExternalSessionsInput): Promise<DiscoveredExternalSession[]>
   inspect(input: InspectExternalSessionInput): Promise<NativeTranscriptSnapshot>
+  /** Create a resumed DSH Agent without requiring an existing control session. */
+  takeOverStandalone(input: TakeOverExternalSessionInput): Promise<TakeOverResult>
   takeOver(agent: Agent, input: TakeOverExternalSessionInput): Promise<TakeOverResult>
   open(agent: Agent, recordId: ExternalSessionRecordId): Promise<TakeOverResult>
   list(agent: Agent): Promise<ExternalSessionRecord[]>

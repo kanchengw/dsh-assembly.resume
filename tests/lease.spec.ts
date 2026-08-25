@@ -31,6 +31,7 @@ async function setup(): Promise<{ ctx: Context; runtime: FakeDshAgentRuntime; re
   ctx.provide(storageBackendServiceKey('memory'), backend)
   await ctx.plugin(StorageDomain, { backend: 'memory' })
   const runtime = new FakeDshAgentRuntime()
+  ctx.provide('agents', runtime as never)
   await ctx.plugin(SessionResumeService, { providers: { codexHome: root } })
   const created = await ctx.sessionResume.takeOver(runtime.controller(), { provider: 'codex', externalSessionId: 'native-lease' as never })
   return { ctx, runtime, recordId: created.record.recordId }

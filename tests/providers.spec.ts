@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -8,6 +8,7 @@ import {
   parseClaudeTranscript,
   parseCodexTranscript,
 } from '../src/providers.ts'
+import { buildDshSeed } from '../src/transcript.ts'
 
 describe('native provider discovery', () => {
   it('discovers Codex metadata and uses the native session index title', async () => {
@@ -37,6 +38,61 @@ describe('native provider discovery', () => {
     )
   })
 
+  it('uses completed Codex UserMessage items for safe session previews', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-codex-completed-user-'))
+    const cwd = join(root, 'workspace')
+    await mkdir(cwd)
+    await writeFile(join(root, 'session.jsonl'), [
+      JSON.stringify({ type: 'session_meta', payload: { session_id: 'codex-completed-user', cwd } }),
+      JSON.stringify({ type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'private injected context' }] } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'item_completed', item: { type: 'UserMessage', content: [{ type: 'text', text: 'initial completed request' }] } } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'item_completed', item: { type: 'UserMessage', content: [{ type: 'text', text: 'latest completed request' }] } } }),
+    ].join('\n'))
+
+    await expect(discoverExternalSessions({ provider: 'codex' }, { codexHome: root })).resolves.toEqual([
+      expect.objectContaining({
+        externalSessionId: 'codex-completed-user',
+        firstUserMessage: 'initial completed request',
+        lastUserMessage: 'latest completed request',
+      }),
+    ])
+  })
+
+  it('strips Codex ambient UI context from completed UserMessage previews', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-codex-ambient-preview-'))
+    const cwd = join(root, 'workspace')
+    const message = `
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request.
+# In app browser:
+- Current URL: http://127.0.0.1:3090/
+</in-app-browser-context>
+
+## My request:
+actual user request
+`
+    await mkdir(cwd)
+    await writeFile(join(root, 'session.jsonl'), [
+      JSON.stringify({ type: 'session_meta', payload: { session_id: 'codex-ambient-preview', cwd } }),
+      JSON.stringify({
+        type: 'event_msg',
+        payload: {
+          type: 'item_completed',
+          item: { type: 'UserMessage', content: [{ type: 'text', text: message, text_elements: [] }] },
+        },
+      }),
+    ].join('\n'))
+
+    const rows = await discoverExternalSessions({ provider: 'codex' }, { codexHome: root })
+    expect(rows).toEqual([expect.objectContaining({
+      externalSessionId: 'codex-ambient-preview',
+      firstUserMessage: 'actual user request',
+      lastUserMessage: 'actual user request',
+    })])
+    expect(JSON.stringify(rows)).not.toContain('ambient-ui-state')
+    expect(JSON.stringify(rows)).not.toContain('Current URL')
+  })
+
   it('does not expose Codex developer or context records as user messages', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-resume-codex-context-'))
     const cwd = join(root, 'workspace')
@@ -59,6 +115,35 @@ describe('native provider discovery', () => {
     expect(JSON.stringify(rows)).not.toContain('private injected context')
   })
 
+  it('excludes legacy Codex exec task templates from discovery and importable user history', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-codex-exec-template-'))
+    const cwd = join(root, 'workspace')
+    await mkdir(cwd)
+    const rows = [
+      { type: 'session_meta', payload: { session_id: 'codex-exec-template', cwd, source: 'exec', history_mode: 'legacy' } },
+      { type: 'event_msg', payload: { type: 'user_message', message: 'Your task is to perform the following. Follow the instructions below exactly. Internal task envelope.' } },
+      { type: 'event_msg', payload: { type: 'agent_message', message: 'internal task response' } },
+    ]
+    await writeFile(join(root, 'session.jsonl'), rows.map(row => JSON.stringify(row)).join('\n'))
+
+    await expect(discoverExternalSessions({ provider: 'codex' }, { codexHome: root })).resolves.toEqual([])
+    expect(parseCodexTranscript(rows).some(event => event.kind === 'user')).toBe(false)
+  })
+
+  it('keeps a genuine legacy Codex exec prompt that does not use the generated task envelope', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-codex-exec-user-'))
+    const cwd = join(root, 'workspace')
+    await mkdir(cwd)
+    await writeFile(join(root, 'session.jsonl'), [
+      JSON.stringify({ type: 'session_meta', payload: { session_id: 'codex-exec-user', cwd, source: 'exec', history_mode: 'legacy' } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'Please review this document.' } }),
+    ].join('\n'))
+
+    await expect(discoverExternalSessions({ provider: 'codex' }, { codexHome: root })).resolves.toEqual([
+      expect.objectContaining({ externalSessionId: 'codex-exec-user', firstUserMessage: 'Please review this document.' }),
+    ])
+  })
+
   it('marks Codex-managed new chats without turning their storage directory into a project', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-resume-codex-new-chat-'))
     const newChatRoot = join(root, 'Documents', 'Codex')
@@ -79,6 +164,52 @@ describe('native provider discovery', () => {
     expect(rows[0]).not.toHaveProperty('projectPath')
   })
 
+  it('excludes Codex subagent transcripts from the resumable conversation list', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-codex-subagent-'))
+    const cwd = join(root, 'workspace')
+    await mkdir(cwd)
+    await writeFile(join(root, 'parent.jsonl'), [
+      JSON.stringify({ type: 'session_meta', payload: { id: 'parent-id', session_id: 'parent-id', cwd } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'parent request' } }),
+    ].join('\n'))
+    await writeFile(join(root, 'subagent.jsonl'), [
+      JSON.stringify({ type: 'session_meta', payload: { id: 'subagent-id', session_id: 'parent-id', parent_thread_id: 'parent-id', cwd, source: { subagent: {} } } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'subagent task' } }),
+    ].join('\n'))
+
+    await expect(discoverExternalSessions({ provider: 'codex' }, { codexHome: root })).resolves.toEqual([
+      expect.objectContaining({ externalSessionId: 'parent-id', firstUserMessage: 'parent request' }),
+    ])
+  })
+
+  it('returns only the newest source when native storage has duplicate session files', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-codex-duplicates-'))
+    const cwd = join(root, 'workspace')
+    const older = join(root, 'archive', 'session.jsonl')
+    const newer = join(root, 'active', 'session.jsonl')
+    await mkdir(cwd)
+    await mkdir(join(root, 'archive'), { recursive: true })
+    await mkdir(join(root, 'active'), { recursive: true })
+    await writeFile(older, [
+      JSON.stringify({ type: 'session_meta', payload: { session_id: 'codex-duplicate-source', cwd } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'older copy' } }),
+    ].join('\n'))
+    await writeFile(newer, [
+      JSON.stringify({ type: 'session_meta', payload: { session_id: 'codex-duplicate-source', cwd } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'newer copy' } }),
+    ].join('\n'))
+    await utimes(older, new Date('2026-08-20T00:00:00.000Z'), new Date('2026-08-20T00:00:00.000Z'))
+    await utimes(newer, new Date('2026-08-24T00:00:00.000Z'), new Date('2026-08-24T00:00:00.000Z'))
+
+    await expect(discoverExternalSessions({ provider: 'codex' }, { codexHome: root })).resolves.toEqual([
+      expect.objectContaining({
+        externalSessionId: 'codex-duplicate-source',
+        sourcePath: newer,
+        firstUserMessage: 'newer copy',
+      }),
+    ])
+  })
+
   it('discovers Claude Code sessions from project JSONL without exposing transcript bodies', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-resume-claude-'))
     const cwd = join(root, 'workspace')
@@ -94,6 +225,77 @@ describe('native provider discovery', () => {
     const rows = await discoverExternalSessions({ provider: 'claude-code' }, { claudeHome: root })
     expect(rows).toEqual([expect.objectContaining({ provider: 'claude-code', externalSessionId: 'claude-1', title: 'inspect-repo', firstUserMessage: 'inspect repo' })])
     expect(JSON.stringify(rows)).not.toContain('private assistant detail')
+  })
+
+  it('discovers native Claude Code Desktop metadata through its linked local transcript', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-claude-desktop-'))
+    const cwd = join(root, 'workspace')
+    const claudeHome = join(root, 'claude-projects')
+    const desktopHome = join(root, 'Claude', 'claude-code-sessions')
+    const transcript = join(claudeHome, 'project', 'desktop-cli-id.jsonl')
+    await mkdir(cwd)
+    await mkdir(join(claudeHome, 'project'), { recursive: true })
+    await mkdir(join(desktopHome, 'account', 'workspace'), { recursive: true })
+    await writeFile(transcript, [
+      JSON.stringify({ type: 'user', sessionId: 'desktop-cli-id', cwd, timestamp: '2026-08-23T00:00:00.000Z', message: { role: 'user', content: 'desktop request' } }),
+      JSON.stringify({ type: 'assistant', sessionId: 'desktop-cli-id', cwd, timestamp: '2026-08-23T00:00:01.000Z', message: { role: 'assistant', model: 'claude-sonnet', content: [{ type: 'text', text: 'desktop answer' }] } }),
+    ].join('\n'))
+    await writeFile(join(desktopHome, 'account', 'workspace', 'local_desktop-id.json'), JSON.stringify({
+      sessionId: 'local_desktop-id', cliSessionId: 'desktop-cli-id', cwd, originCwd: cwd,
+      title: 'Desktop task', createdAt: 1787443200000, lastActivityAt: 1787443260000, isArchived: false,
+    }))
+
+    const config = { claudeHome, claudeDesktopHome: desktopHome }
+    const rows = await discoverExternalSessions({ provider: 'claude-code-desktop' }, config)
+    expect(rows).toEqual([expect.objectContaining({
+      provider: 'claude-code-desktop', externalSessionId: 'local_desktop-id', cwd, projectPath: cwd,
+      sourcePath: transcript, title: 'Desktop task', firstUserMessage: 'desktop request',
+      createdAt: '2026-08-23T00:00:00.000Z', updatedAt: '2026-08-23T00:01:00.000Z',
+    })])
+    await expect(inspectExternalSession({ provider: 'claude-code-desktop', externalSessionId: 'local_desktop-id' as never }, config)).resolves.toMatchObject({
+      session: { provider: 'claude-code-desktop', externalSessionId: 'local_desktop-id', sourcePath: transcript },
+      events: [expect.objectContaining({ kind: 'user' }), expect.objectContaining({ kind: 'assistant', model: 'claude-sonnet' })],
+    })
+  })
+
+  it('keeps CLI-imported Desktop records in CLI and excludes native Desktop transcripts from CLI', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-claude-sources-'))
+    const cwd = join(root, 'workspace')
+    const claudeHome = join(root, 'claude-projects')
+    const desktopHome = join(root, 'Claude', 'claude-code-sessions')
+    await mkdir(cwd)
+    await mkdir(join(claudeHome, 'project'), { recursive: true })
+    await mkdir(join(desktopHome, 'account', 'workspace'), { recursive: true })
+    const transcriptRow = (sessionId: string, message: string): string => JSON.stringify({ type: 'user', sessionId, cwd, message: { role: 'user', content: message } })
+    await writeFile(join(claudeHome, 'project', 'native-desktop.jsonl'), transcriptRow('native-desktop', 'native desktop'))
+    await writeFile(join(claudeHome, 'project', 'imported-cli.jsonl'), transcriptRow('imported-cli', 'imported CLI'))
+    await writeFile(join(desktopHome, 'account', 'workspace', 'local_native-record.json'), JSON.stringify({ sessionId: 'local_native-record', cliSessionId: 'native-desktop', cwd }))
+    await writeFile(join(desktopHome, 'account', 'workspace', 'local_imported-cli.json'), JSON.stringify({ sessionId: 'local_imported-cli', cliSessionId: 'imported-cli', cwd }))
+
+    const config = { claudeHome, claudeDesktopHome: desktopHome }
+    await expect(discoverExternalSessions({ provider: 'claude-code' }, config)).resolves.toEqual([
+      expect.objectContaining({ provider: 'claude-code', externalSessionId: 'imported-cli' }),
+    ])
+    await expect(discoverExternalSessions({ provider: 'claude-code-desktop' }, config)).resolves.toEqual([
+      expect.objectContaining({ provider: 'claude-code-desktop', externalSessionId: 'local_native-record', sourcePath: join(claudeHome, 'project', 'native-desktop.jsonl') }),
+    ])
+  })
+
+  it('does not advertise archived, cloud, broken, or transcript-less Desktop metadata', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-claude-desktop-invalid-'))
+    const cwd = join(root, 'workspace')
+    const claudeHome = join(root, 'claude-projects')
+    const desktopHome = join(root, 'Claude', 'claude-code-sessions')
+    await mkdir(cwd)
+    await mkdir(join(claudeHome, 'project'), { recursive: true })
+    await mkdir(join(desktopHome, 'account', 'workspace'), { recursive: true })
+    await writeFile(join(claudeHome, 'project', 'archived.jsonl'), JSON.stringify({ type: 'user', sessionId: 'archived', cwd, message: { role: 'user', content: 'archived' } }))
+    await writeFile(join(desktopHome, 'account', 'workspace', 'local_archived.json'), JSON.stringify({ sessionId: 'local_archived', cliSessionId: 'archived', cwd, isArchived: true }))
+    await writeFile(join(desktopHome, 'account', 'workspace', 'cloud.json'), JSON.stringify({ sessionId: 'cse_cloud', cliSessionId: 'archived', cwd }))
+    await writeFile(join(desktopHome, 'account', 'workspace', 'local_missing.json'), JSON.stringify({ sessionId: 'local_missing', cliSessionId: 'missing', cwd }))
+    await writeFile(join(desktopHome, 'account', 'workspace', 'local_broken.json'), '{')
+
+    await expect(discoverExternalSessions({ provider: 'claude-code-desktop' }, { claudeHome, claudeDesktopHome: desktopHome })).resolves.toEqual([])
   })
 
   it('filters by provider, workspace, query, and limit', async () => {
@@ -116,8 +318,8 @@ describe('native provider semantic transcript parsing', () => {
       { type: 'event_msg', payload: { type: 'user_message', message: 'inspect the repo', turn_id: 'turn-1' } },
       { type: 'event_msg', payload: { type: 'agent_message', message: 'I inspected it', turn_id: 'turn-1' } },
     ])).toEqual([
-      expect.objectContaining({ kind: 'user', turn: 0, content: [{ type: 'text', text: 'inspect the repo' }] }),
-      expect.objectContaining({ kind: 'assistant', turn: 0, provider: 'openai', model: 'gpt-5', content: [{ type: 'text', text: 'I inspected it' }] }),
+      expect.objectContaining({ kind: 'user', turn: 1, content: [{ type: 'text', text: 'inspect the repo' }] }),
+      expect.objectContaining({ kind: 'assistant', turn: 1, provider: 'openai', model: 'gpt-5', content: [{ type: 'text', text: 'I inspected it' }] }),
     ])
   })
 
@@ -131,19 +333,56 @@ describe('native provider semantic transcript parsing', () => {
     ]).filter(event => event.kind === 'assistant')).toHaveLength(1)
   })
 
-  it('parses Codex tool call and output as paired semantic events', () => {
-    expect(parseCodexTranscript([
+  it('omits Codex tool traces because the native runtime cannot be resumed in DSH', () => {
+    const events = parseCodexTranscript([
       { type: 'session_meta', payload: { session_id: 'codex-tools', model_provider: 'openai', model: 'gpt-5' } },
       { type: 'event_msg', payload: { type: 'user_message', message: 'run tests', turn_id: 'turn-1' } },
       { type: 'response_item', payload: { type: 'function_call', call_id: 'call-1', name: 'shell', arguments: '{"cmd":"pnpm test"}', turn_id: 'turn-1' } },
       { type: 'response_item', payload: { type: 'function_call_output', call_id: 'call-1', output: 'passed', turn_id: 'turn-1' } },
       { type: 'event_msg', payload: { type: 'agent_message', message: 'All tests passed', turn_id: 'turn-1' } },
-    ])).toEqual([
+    ])
+    expect(events).toEqual([
       expect.objectContaining({ kind: 'user' }),
-      expect.objectContaining({ kind: 'assistant', toolCalls: [{ callId: 'call-1', name: 'shell', arguments: '{"cmd":"pnpm test"}' }] }),
-      expect.objectContaining({ kind: 'tool-result', callId: 'call-1', content: [{ type: 'text', text: 'passed' }] }),
       expect.objectContaining({ kind: 'assistant', content: [{ type: 'text', text: 'All tests passed' }] }),
     ])
+    expect(events.some(event => event.kind === 'tool-result' || (event.kind === 'assistant' && event.toolCalls !== undefined))).toBe(false)
+  })
+
+  it('skips a Codex tool trace even when transport records carry different turns', () => {
+    const events = parseCodexTranscript([
+      { type: 'session_meta', payload: { session_id: 'codex-tool-turn', model_provider: 'openai', model: 'gpt-5' } },
+      { type: 'event_msg', payload: { type: 'user_message', message: 'run tests', turn_id: 'user-turn' } },
+      { type: 'response_item', payload: { type: 'custom_tool_call', call_id: 'call-1', name: 'shell', input: '{"cmd":"pnpm test"}', turn_id: 'model-turn' } },
+      { type: 'response_item', payload: { type: 'custom_tool_call_output', call_id: 'call-1', output: 'passed', turn_id: 'user-turn' } },
+    ])
+
+    expect(events.map(event => event.turn)).toEqual([1])
+    expect(() => buildDshSeed(events)).not.toThrow()
+  })
+
+  it('skips a Codex tool exchange whose output is empty', () => {
+    const events = parseCodexTranscript([
+      { type: 'session_meta', payload: { session_id: 'codex-empty-tool-output', model_provider: 'openai', model: 'gpt-5' } },
+      { type: 'event_msg', payload: { type: 'user_message', message: 'run the task', turn_id: 'turn-1' } },
+      { type: 'response_item', payload: { type: 'function_call', call_id: 'empty-call', name: 'delegate', arguments: '{}', turn_id: 'turn-1' } },
+      { type: 'response_item', payload: { type: 'function_call_output', call_id: 'empty-call', output: '', turn_id: 'turn-1' } },
+      { type: 'event_msg', payload: { type: 'agent_message', message: 'completed', turn_id: 'turn-1' } },
+    ])
+
+    expect(events.map(event => event.kind)).toEqual(['user', 'assistant'])
+    expect(() => buildDshSeed(events)).not.toThrow()
+  })
+
+  it('skips a Codex tool exchange whose output is whitespace-only', () => {
+    const events = parseCodexTranscript([
+      { type: 'session_meta', payload: { session_id: 'codex-whitespace-tool-output', model_provider: 'openai', model: 'gpt-5' } },
+      { type: 'event_msg', payload: { type: 'user_message', message: 'run the task', turn_id: 'turn-1' } },
+      { type: 'response_item', payload: { type: 'function_call', call_id: 'empty-call', name: 'delegate', arguments: '{}', turn_id: 'turn-1' } },
+      { type: 'response_item', payload: { type: 'function_call_output', call_id: 'empty-call', output: '  \n', turn_id: 'turn-1' } },
+      { type: 'event_msg', payload: { type: 'agent_message', message: 'completed', turn_id: 'turn-1' } },
+    ])
+
+    expect(events.map(event => event.kind)).toEqual(['user', 'assistant'])
   })
 
   it('does not import Codex developer or injected context as user history', () => {
@@ -151,9 +390,67 @@ describe('native provider semantic transcript parsing', () => {
       { type: 'session_meta', payload: { session_id: 'codex-context', model_provider: 'openai', model: 'gpt-5' } },
       { type: 'response_item', payload: { role: 'developer', content: [{ type: 'text', text: 'private developer context' }] } },
       { type: 'response_item', payload: { role: 'user', content: [{ type: 'input_text', text: 'private injected context' }] } },
-      { type: 'event_msg', payload: { type: 'user_message', message: 'real user request' } },
+      { type: 'event_msg', payload: { type: 'item_completed', item: { type: 'UserMessage', id: 'user-item', content: [{ type: 'input_text', text: 'real user request' }] } } },
     ])
     expect(events).toEqual([expect.objectContaining({ kind: 'user', content: [{ type: 'text', text: 'real user request' }] })])
+  })
+
+  it('strips Codex ambient UI context before building the imported DSH history', () => {
+    const message = `
+<in-app-browser-context source="ambient-ui-state">
+This block is automatically supplied ambient UI state, not part of the user's request.
+# In app browser:
+- Current URL: http://127.0.0.1:3090/
+</in-app-browser-context>
+
+## My request:
+actual user request
+`
+    const events = parseCodexTranscript([
+      { type: 'session_meta', payload: { session_id: 'codex-ambient-import', model_provider: 'openai', model: 'gpt-5' } },
+      {
+        type: 'event_msg',
+        payload: {
+          type: 'item_completed',
+          item: { type: 'UserMessage', id: 'ambient-user', content: [{ type: 'text', text: message, text_elements: [] }] },
+        },
+      },
+      { type: 'event_msg', payload: { type: 'agent_message', message: 'assistant answer' } },
+    ])
+
+    expect(events).toEqual([
+      expect.objectContaining({ kind: 'user', content: [{ type: 'text', text: 'actual user request' }] }),
+      expect.objectContaining({ kind: 'assistant', content: [{ type: 'text', text: 'assistant answer' }] }),
+    ])
+    const seed = buildDshSeed(events)
+    expect(seed.find(event => event.type === 'user/message')).toMatchObject({
+      data: { role: 'user', content: [{ type: 'text', text: 'actual user request' }] },
+    })
+    expect(JSON.stringify(seed)).not.toContain('ambient-ui-state')
+    expect(JSON.stringify(seed)).not.toContain('Current URL')
+  })
+
+  it('preserves ambient-like markup pasted after genuine user text', () => {
+    const markup = '<in-app-browser-context source="ambient-ui-state">literal example</in-app-browser-context>'
+    const events = parseCodexTranscript([
+      { type: 'session_meta', payload: { session_id: 'codex-user-markup' } },
+      {
+        type: 'event_msg',
+        payload: {
+          type: 'item_completed',
+          item: {
+            type: 'UserMessage',
+            id: 'markup-user',
+            content: [{ type: 'text', text: 'keep this prefix' }, { type: 'text', text: markup }],
+          },
+        },
+      },
+    ])
+
+    expect(events).toEqual([expect.objectContaining({
+      kind: 'user',
+      content: [{ type: 'text', text: 'keep this prefix' }, { type: 'text', text: markup }],
+    })])
   })
 
   it('starts a new anonymous Codex turn at each native user message', () => {
@@ -164,7 +461,20 @@ describe('native provider semantic transcript parsing', () => {
       { type: 'event_msg', payload: { type: 'user_message', message: 'second' } },
       { type: 'event_msg', payload: { type: 'agent_message', message: 'two' } },
     ])
-    expect(events.map(event => event.turn)).toEqual([0, 0, 1, 1])
+    expect(events.map(event => event.turn)).toEqual([1, 1, 2, 2])
+  })
+
+  it('normalizes Codex transport turn IDs into source-order conversation turns', () => {
+    const events = parseCodexTranscript([
+      { type: 'session_meta', payload: { session_id: 'codex-turn-order', model_provider: 'openai', model: 'gpt-5' } },
+      { type: 'event_msg', payload: { type: 'item_completed', turn_id: 'root-turn', item: { type: 'UserMessage', id: 'u1', content: [{ type: 'input_text', text: 'first' }] } } },
+      { type: 'response_item', payload: { type: 'message', role: 'assistant', turn_id: 'model-turn-1', content: [{ type: 'output_text', text: 'one' }] } },
+      { type: 'event_msg', payload: { type: 'item_completed', turn_id: 'root-turn', item: { type: 'UserMessage', id: 'u2', content: [{ type: 'input_text', text: 'second' }] } } },
+      { type: 'response_item', payload: { type: 'message', role: 'assistant', turn_id: 'model-turn-2', content: [{ type: 'output_text', text: 'two' }] } },
+    ])
+
+    expect(events.map(event => event.turn)).toEqual([1, 1, 2, 2])
+    expect(() => buildDshSeed(events)).not.toThrow()
   })
 
   it('parses Claude title slug, user, assistant, tool use, and tool result', () => {
@@ -189,6 +499,17 @@ describe('native provider semantic transcript parsing', () => {
       expect.objectContaining({ kind: 'user' }),
       expect.objectContaining({ kind: 'assistant', content: [{ type: 'text', text: 'public answer' }] }),
     ])
+  })
+
+  it('keeps a Claude assistant without promptId in its preceding user turn', () => {
+    const events = parseClaudeTranscript([
+      { type: 'mode', sessionId: 'claude-turn-order' },
+      { type: 'user', sessionId: 'claude-turn-order', promptId: 'user-prompt', message: { role: 'user', content: 'hello' } },
+      { type: 'assistant', sessionId: 'claude-turn-order', message: { role: 'assistant', model: 'claude-sonnet', content: [{ type: 'text', text: 'hello back' }] } },
+    ])
+
+    expect(events.map(event => event.turn)).toEqual([1, 1])
+    expect(() => buildDshSeed(events)).not.toThrow()
   })
 
   it('rejects malformed native JSONL during inspection', async () => {

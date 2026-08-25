@@ -1,7 +1,7 @@
 import type { IWorkspaces, WorkspaceView } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
-type SessionCreatePort = {
+type SessionPort = {
   open(id: SessionId): void
   create(options: { workspaceId?: WorkspaceView['workspaceId']; sessionId?: SessionId }): Promise<SessionId>
 }
@@ -19,7 +19,7 @@ function workspaceAtPath(workspaces: readonly WorkspaceView[], path: string): Wo
 /** Attach a newly-created DSH takeover session to its native project and select it. */
 export async function openDshTargetSession(
   workspaces: Pick<IWorkspaces, 'list' | 'create'>,
-  sessions: SessionCreatePort,
+  sessions: SessionPort,
   sessionId: SessionId,
   projectPath: string | undefined,
 ): Promise<SessionId> {
@@ -28,8 +28,14 @@ export async function openDshTargetSession(
     return sessionId
   }
 
-  const workspace = workspaceAtPath(workspaces.list.getSnapshot().items, projectPath)
-    ?? await workspaces.create({ path: projectPath })
+  const existingWorkspace = workspaceAtPath(workspaces.list.getSnapshot().items, projectPath)
+  // DSH Host requires exact cwd strings when attaching an existing session.
+  if (existingWorkspace !== undefined && existingWorkspace.path !== projectPath) {
+    sessions.open(sessionId)
+    return sessionId
+  }
+
+  const workspace = existingWorkspace ?? await workspaces.create({ path: projectPath })
   await sessions.create({ workspaceId: workspace.workspaceId, sessionId })
   sessions.open(sessionId)
   return sessionId

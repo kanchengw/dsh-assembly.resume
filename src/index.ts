@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
+import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import s from '@deepseek-ai/schemastery'
-import type { Agent, AgentHandle, AgentOptions } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle, AgentOptions, AgentRegistry } from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { TypertRemoteService, Remote } from '@deepseek-ai/dsh-typert-protocol'
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain'
@@ -52,6 +53,13 @@ declare module '@deepseek-ai/cordis' {
     sessionResume: SessionResumeService
   }
 }
+
+/** Settings namespace that enrolls this plugin's card in the Plugins configuration surface. */
+export const SESSION_RESUME_SETTINGS_NAMESPACE = settingsNamespace('session-resume')
+
+// The card has no mutable preference yet; the registered namespace is the
+// Plugins surface's discovery mechanism for independently shipped cards.
+const SessionResumeSettingsSchema = s.object({})
 
 /** Plugin configuration for native source discovery and DSH Agent takeover. */
 export interface Config {
@@ -124,7 +132,7 @@ function storedLeaseOf(lease: SessionLease): StoredExternalSessionRecord['lease'
 }
 
 function providerOf(value: string): ExternalProvider {
-  if (value === 'codex' || value === 'claude-code') return value
+  if (value === 'codex' || value === 'claude-code' || value === 'claude-code-desktop') return value
   throw new SessionResumeError('RESUME_BINDING_CORRUPT', `unsupported native provider '${value}'`)
 }
 
@@ -134,7 +142,7 @@ function effectiveAgentOptions(owner: Agent, configured: AgentOptions, requested
 
 /** Durable binding and DSH Agent takeover service. */
 export class SessionResumeService extends TypertRemoteService implements ExternalSessionResumeService {
-  static inject = ['storageDomain']
+  static inject = ['storageDomain', 'agents']
 
   static Config: s<Config> = s.object({
     autoRecover: s.boolean().default(true),
@@ -154,6 +162,9 @@ export class SessionResumeService extends TypertRemoteService implements Externa
     this.providers = config.providers ?? {}
     this.defaultAgentOptions = config.agentOptions ?? {}
     this.autoRecover = config.autoRecover ?? true
+    ctx.inject(['settings'], (settingsCtx) => {
+      settingsCtx.settings.register(SESSION_RESUME_SETTINGS_NAMESPACE, SessionResumeSettingsSchema)
+    })
   }
 
   /** Discover only bounded metadata; transcript bodies are read on selection. */
@@ -173,14 +184,24 @@ export class SessionResumeService extends TypertRemoteService implements Externa
     })
   }
 
+  /** Create a resumed DSH Agent directly from the standalone settings surface. */
+  @Remote('takeOverStandalone')
+  takeOverStandalone(input: TakeOverExternalSessionInput): Promise<TakeOverResult> {
+    return this.takeOverWith(this.ctx.agents, this.defaultAgentOptions, input)
+  }
+
   /** Import a native transcript and make a DSH Agent the live responder. */
   @Remote('takeOver')
-  async takeOver(agent: Agent, input: TakeOverExternalSessionInput): Promise<TakeOverResult> {
+  takeOver(agent: Agent, input: TakeOverExternalSessionInput): Promise<TakeOverResult> {
+    return this.takeOverWith(agent.ctx.agents, effectiveAgentOptions(agent, this.defaultAgentOptions, input.agentOptions), input)
+  }
+
+  private async takeOverWith(agents: AgentRegistry, agentOptions: AgentOptions, input: TakeOverExternalSessionInput): Promise<TakeOverResult> {
     const snapshot = await this.inspect(input)
     const existing = (await this.find({ provider: input.provider, externalSessionId: input.externalSessionId }))
       .find(record => record.importFingerprint === snapshot.fingerprint && record.status !== 'closed')
     if (existing !== undefined) {
-      await this.ensureLiveAgent(agent, existing.dshSessionId, input.agentOptions)
+      await this.ensureLiveAgent(agents, existing.dshSessionId, agentOptions)
       return { record: existing, dshSessionId: existing.dshSessionId, reused: true }
     }
 
@@ -193,11 +214,11 @@ export class SessionResumeService extends TypertRemoteService implements Externa
     }
     let handle: AgentHandle | undefined
     try {
-      handle = await agent.ctx.agents.create({
+      handle = await agents.create({
         sessionId: dshSessionId,
         seed,
         meta: { cwd: snapshot.session.cwd },
-        agentOptions: effectiveAgentOptions(agent, this.defaultAgentOptions, input.agentOptions),
+        agentOptions,
       })
     } catch (error: unknown) {
       throw new SessionResumeError('RESUME_DSH_AGENT_START_FAILED', error instanceof Error ? error.message : String(error), undefined, { cause: error })
@@ -216,7 +237,7 @@ export class SessionResumeService extends TypertRemoteService implements Externa
   async open(agent: Agent, recordId: ExternalSessionRecordId): Promise<TakeOverResult> {
     const current = await this.get(recordId)
     if (current === undefined || current.status === 'closed') throw new SessionResumeError('RESUME_BINDING_NOT_FOUND', `takeover binding '${recordId}' was not found`)
-    await this.ensureLiveAgent(agent, current.dshSessionId, undefined)
+    await this.ensureLiveAgent(agent.ctx.agents, current.dshSessionId, effectiveAgentOptions(agent, this.defaultAgentOptions, undefined))
     const record = current.status === 'ready' ? current : await this.updateStatus(recordId, 'ready')
     return { record, dshSessionId: current.dshSessionId, reused: true }
   }
@@ -269,12 +290,12 @@ export class SessionResumeService extends TypertRemoteService implements Externa
     })
   }
 
-  private async ensureLiveAgent(owner: Agent, dshSessionId: SessionId, agentOptions?: AgentOptions): Promise<void> {
-    if (owner.ctx.agents.get(dshSessionId) !== undefined) return
+  private async ensureLiveAgent(agents: AgentRegistry, dshSessionId: SessionId, agentOptions?: AgentOptions): Promise<void> {
+    if (agents.get(dshSessionId) !== undefined) return
     try {
-      await owner.ctx.agents.resume({
+      await agents.resume({
         resumeSessionId: dshSessionId,
-        agentOptions: effectiveAgentOptions(owner, this.defaultAgentOptions, agentOptions),
+        ...(agentOptions === undefined ? {} : { agentOptions }),
       })
     } catch (error: unknown) {
       throw new SessionResumeError('RESUME_DSH_SESSION_MISSING', error instanceof Error ? error.message : String(error), undefined, { cause: error })

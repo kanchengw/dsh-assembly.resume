@@ -29,7 +29,7 @@ const absolutePath = nonBlankString.refine(value => isAbsolute(value), {
   message: 'value must be an absolute path',
 })
 
-const provider = z.enum(['codex', 'claude-code']) satisfies z.ZodType<ExternalProvider>
+const provider = z.enum(['codex', 'claude-code', 'claude-code-desktop']) satisfies z.ZodType<ExternalProvider>
 const status = z.enum(['ready', 'running', 'stale', 'detached', 'closed', 'failed']) satisfies z.ZodType<ExternalSessionStatus>
 const errorCode = z.enum([
   'RESUME_PROVIDER_UNAVAILABLE',

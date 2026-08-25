@@ -22,6 +22,7 @@ async function mount(backend: MemoryBackend, codexHome: string): Promise<{ ctx: 
   ctx.provide(storageBackendServiceKey('memory'), backend)
   await ctx.plugin(StorageDomain, { backend: 'memory' })
   const runtime = new FakeDshAgentRuntime()
+  ctx.provide('agents', runtime as never)
   await ctx.plugin(SessionResumeService, { providers: { codexHome } })
   return { ctx, runtime }
 }

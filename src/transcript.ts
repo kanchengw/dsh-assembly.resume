@@ -160,7 +160,7 @@ export function buildDshSeed(input: readonly NativeSemanticEvent[]): DshSessionE
     }
   }
   const turnIds = [...new Set(ordered.map(event => event.turn))]
-  if (turnIds.some(turn => !Number.isSafeInteger(turn) || turn < 0)) throw new Error('native transcript has an invalid turn')
+  if (turnIds.some(turn => !Number.isSafeInteger(turn) || turn < 1)) throw new Error('native transcript turns must start at 1')
   const events: SeedEvent[] = []
   for (const turn of turnIds) {
     const turnEvents = ordered.filter(event => event.turn === turn)
