@@ -24,7 +24,7 @@ const MAX_PREVIEW_CHARS = 400
 const MAX_TITLE_CHARS = 80
 const DEFAULT_LIMIT = 100
 // Bump when the semantic import contract changes so old seeded sessions are not reused.
-const IMPORT_FINGERPRINT_VERSION = '4'
+const IMPORT_FINGERPRINT_VERSION = '7'
 
 /** Environment and local-store options for the supported native surfaces. */
 export interface ProviderConfig {
@@ -213,18 +213,30 @@ function textFromUnknown(value: unknown): string | undefined {
 const CODEX_LEGACY_EXEC_TASK_PREFIX = 'Your task is to perform the following. Follow the instructions below exactly.'
 const CODEX_AMBIENT_CONTEXT_OPEN = '<in-app-browser-context source="ambient-ui-state">'
 const CODEX_AMBIENT_CONTEXT_CLOSE = '</in-app-browser-context>'
-const CODEX_REQUEST_HEADING = '## My request:'
+const CODEX_ATTACHMENT_ENVELOPE_OPEN = '# Files mentioned by the user:'
+const CODEX_REQUEST_HEADINGS = ['## My request:', '## My request for Codex:'] as const
 
-/** Remove only the explicit app-supplied envelope serialized inside a Codex UserMessage. */
-function codexUserText(value: string): string {
+/** Extract the actual submitted request from a Codex desktop UserMessage envelope. */
+function codexUserText(value: string): string | undefined {
   const leading = value.trimStart()
-  if (!leading.startsWith(CODEX_AMBIENT_CONTEXT_OPEN)) return value
+  const attachmentEnvelope = leading.startsWith(CODEX_ATTACHMENT_ENVELOPE_OPEN)
+  const ambientEnvelope = leading.startsWith(CODEX_AMBIENT_CONTEXT_OPEN)
+  if (!attachmentEnvelope && !ambientEnvelope) return value
+  let requestOffset = Number.POSITIVE_INFINITY
+  let requestHeading: string | undefined
+  for (const heading of CODEX_REQUEST_HEADINGS) {
+    const offset = leading.indexOf(heading)
+    if (offset >= 0 && offset < requestOffset) {
+      requestOffset = offset
+      requestHeading = heading
+    }
+  }
+  if (requestHeading !== undefined) return leading.slice(requestOffset + requestHeading.length).trim()
+  if (attachmentEnvelope) return undefined
   const closeAt = leading.indexOf(CODEX_AMBIENT_CONTEXT_CLOSE, CODEX_AMBIENT_CONTEXT_OPEN.length)
-  if (closeAt < 0) return value
+  if (closeAt < 0) return undefined
   const remainder = leading.slice(closeAt + CODEX_AMBIENT_CONTEXT_CLOSE.length).trimStart()
-  return (remainder.startsWith(CODEX_REQUEST_HEADING)
-    ? remainder.slice(CODEX_REQUEST_HEADING.length)
-    : remainder).trim()
+  return remainder.trim().length === 0 ? undefined : remainder.trim()
 }
 
 /** Legacy exec sessions store their generated task envelope as a user_message. */
@@ -262,13 +274,12 @@ function nativeContent(value: unknown): NativeContentBlock[] {
 }
 
 function codexUserContent(value: unknown): NativeContentBlock[] {
-  let firstText = true
-  return nativeContent(value).flatMap((block) => {
-    if (block.type !== 'text' || !firstText) return [block]
-    firstText = false
-    const text = codexUserText(block.text)
-    return text.trim().length === 0 ? [] : [{ type: 'text' as const, text }]
-  })
+  const blocks = nativeContent(value)
+  const serialized = blocks.map(block => block.text).join('')
+  const text = codexUserText(serialized)
+  if (text === undefined) return []
+  if (text === serialized) return blocks
+  return text.trim().length === 0 ? [] : [{ type: 'text', text }]
 }
 
 function eventTime(value: unknown, fallback: number): number {
@@ -378,13 +389,11 @@ function codexPreviewText(row: Record<string, unknown>, meta: Record<string, unk
   const payload = record(row['payload'])
   if (isCodexLegacyExecTask(payload, meta)) return undefined
   if (payload?.['type'] === 'user_message') {
-    const text = textFromUnknown(payload['message'])
-    return bounded(text === undefined ? undefined : codexUserText(text))
+    return bounded(codexUserContent(payload['message']).map(block => block.text).join(''))
   }
   const item = record(payload?.['item'])
   if (payload?.['type'] !== 'item_completed' || item?.['type'] !== 'UserMessage') return undefined
-  const text = textFromUnknown(item['content'])
-  return bounded(text === undefined ? undefined : codexUserText(text))
+  return bounded(codexUserContent(item['content']).map(block => block.text).join(''))
 }
 
 /** Parse Claude Code JSONL into model-visible semantic events. */
