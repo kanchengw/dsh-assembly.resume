@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { dirname, resolve, sep } from 'node:path'
 import { defineConfig } from 'tsdown'
 
 const PACKAGE_ID = 'dsh-assembly.resume'
@@ -14,7 +14,7 @@ function cssModulePlugin() {
     load(id: string) {
       if (!id.endsWith('?dsh-css-module')) return undefined
       const emittedPath = id.slice(0, -'?dsh-css-module'.length)
-      const sourcePath = emittedPath.replace(/\\lib\\types\\/u, '\\src\\')
+      const sourcePath = emittedPath.replace(`${sep}lib${sep}types${sep}`, `${sep}src${sep}`)
       const path = existsSync(emittedPath) ? emittedPath : sourcePath
       const css = readFileSync(path, 'utf8')
       const classes = Object.fromEntries([...css.matchAll(/\.([A-Za-z_$][\w$-]*)\s*\{/gu)].map(match => [match[1], match[1]]))
