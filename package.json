@@ -1,7 +1,7 @@
 {
   "name": "dsh-assembly.resume",
   "description": "Import local Codex and Claude Code sessions into DSH Agent conversations",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -75,8 +75,8 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../deepseek-harness/vendor/cordis",
-    "@deepseek-ai/dsh-brand": "link:../../deepseek-harness/packages/util/brand",
     "@deepseek-ai/dsh-agent": "link:../../deepseek-harness/packages/core/agent",
+    "@deepseek-ai/dsh-brand": "link:../../deepseek-harness/packages/util/brand",
     "@deepseek-ai/dsh-invariants": "link:../../deepseek-harness/packages/runtime-diagnostics/invariants",
     "@deepseek-ai/dsh-llm": "link:../../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-session": "link:../../deepseek-harness/packages/core/session",
