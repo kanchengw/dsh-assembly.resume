@@ -1,6 +1,6 @@
 # dsh-assembly.resume
 
-Version: `v0.1.0`
+Version: `v0.1.2`
 
 Bring an existing Codex or Claude Code conversation into DSH, then continue it
 with the DSH Agent.
@@ -10,7 +10,8 @@ with the DSH Agent.
 - Finds local conversations from Codex, Claude Code CLI, and Claude Code Desktop.
 - Groups conversations by their original project so they are easier to find.
 - Imports the selected conversation into DSH, including its visible messages and tool activity.
-- Automatically creates the matching DSH project and workspace when the source conversation belongs to a project.
+- Automatically registers and binds an existing source directory as a DSH Workspace.
+- If the historical path no longer exists or the original conversation had no workspace, a new workspace can be specified during handoff. Otherwise, the conversation imports unbound and the old directory is never recreated.
 - Continue the conversation in DSH after transfer.
 
 ## Installation

@@ -344,6 +344,29 @@
   border-top: 1px solid var(--dsw-alias-border-l1);
 }
 
+.notice {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-left: 3px solid var(--dsw-alias-state-business-primary);
+  border-radius: 7px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-base-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.noticeTitle {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.notice .refresh {
+  justify-self: start;
+}
+
 .metaRow {
   display: grid;
   gap: 2px;
@@ -369,4 +392,76 @@
 .tabActive:disabled {
   cursor: default;
   opacity: 0.5;
+}
+
+@media (max-width: 600px) {
+  .cardBody {
+    margin: 0 4px;
+  }
+
+  .cardHeader {
+    gap: 4px;
+    padding: 10px 8px;
+  }
+
+  .cardName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cardDescription {
+    display: none;
+  }
+
+  .section {
+    gap: 12px;
+    padding-top: 12px;
+  }
+
+  .providerTabs,
+  .tab,
+  .tabActive,
+  .primary {
+    width: 100%;
+  }
+
+  .providerTabs {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tab,
+  .tabActive {
+    justify-content: flex-start;
+  }
+
+  .sessionHeader,
+  .searchRow,
+  .projectHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .search {
+    min-width: 0;
+  }
+
+  .projectHeaderMain {
+    width: 100%;
+  }
+
+  .projectCount {
+    padding-left: 0;
+  }
+
+  .projectSessions {
+    padding-left: 0;
+  }
+
+  .rowTitle,
+  .detailTitle {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
 }

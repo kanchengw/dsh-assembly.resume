@@ -25,6 +25,8 @@ export interface DiscoveredExternalSession {
   readonly cwd: string
   /** Absent for provider-native unscoped/new-chat sessions. */
   readonly projectPath?: string
+  /** Whether the source project directory still exists. Absent for unscoped sessions. */
+  readonly projectPathAvailable?: boolean
   readonly sourcePath: string
   readonly createdAt?: string
   readonly updatedAt?: string
@@ -52,7 +54,15 @@ export interface InspectExternalSessionInput {
 export interface TakeOverExternalSessionInput extends InspectExternalSessionInput {
   /** Optional explicit DSH Agent route; omitted uses the host default. */
   readonly agentOptions?: { readonly provider?: string; readonly model?: string; readonly maxTokens?: number }
+  /** Existing directory chosen to replace an unavailable source workspace. */
+  readonly targetWorkspacePath?: string
 }
+
+/** Resolved DSH cwd and Workspace target, kept separate from source provenance. */
+export type ExternalSessionWorkspaceTarget =
+  | { readonly kind: 'source'; readonly activeCwd: string; readonly workspacePath?: string }
+  | { readonly kind: 'replacement'; readonly activeCwd: string; readonly workspacePath: string }
+  | { readonly kind: 'unbound' }
 
 /** A complete validated semantic transcript snapshot from one native provider. */
 export interface NativeTranscriptSnapshot {
@@ -103,6 +113,8 @@ export interface ExternalSessionRecord {
   readonly dshSessionId: SessionId
   readonly cwd: string
   readonly projectPath?: string
+  /** Absent only on records written by releases before workspace-target tracking. */
+  readonly workspaceTarget?: ExternalSessionWorkspaceTarget
   readonly title?: string
   readonly sourcePath: string
   readonly importFingerprint: string

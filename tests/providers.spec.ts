@@ -267,6 +267,26 @@ C:/Users/example/AppData/Local/Temp/codex-clipboard.png`,
     expect(rows[0]).not.toHaveProperty('projectPath')
   })
 
+  it('reports whether a discovered project workspace still exists', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-codex-workspace-state-'))
+    const existingCwd = join(root, 'existing')
+    const missingCwd = join(root, 'missing')
+    await mkdir(existingCwd)
+    await writeFile(join(root, 'existing.jsonl'), [
+      JSON.stringify({ type: 'session_meta', payload: { session_id: 'workspace-existing', cwd: existingCwd } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'existing workspace' } }),
+    ].join('\n'))
+    await writeFile(join(root, 'missing.jsonl'), [
+      JSON.stringify({ type: 'session_meta', payload: { session_id: 'workspace-missing', cwd: missingCwd } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'missing workspace' } }),
+    ].join('\n'))
+
+    const rows = await discoverExternalSessions({ provider: 'codex' }, { codexHome: root })
+
+    expect(rows.find(row => row.externalSessionId === 'workspace-existing')).toMatchObject({ projectPathAvailable: true })
+    expect(rows.find(row => row.externalSessionId === 'workspace-missing')).toMatchObject({ projectPathAvailable: false })
+  })
+
   it('excludes Codex subagent transcripts from the resumable conversation list', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-resume-codex-subagent-'))
     const cwd = join(root, 'workspace')

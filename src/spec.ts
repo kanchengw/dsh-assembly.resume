@@ -13,6 +13,7 @@ import type {
   SessionOwnerId,
   StoredExternalSessionRecord,
   StoredSessionLease,
+  ExternalSessionWorkspaceTarget,
 } from './types.ts'
 import type { SessionResumeErrorCode } from './types.ts'
 
@@ -47,6 +48,12 @@ const errorCode = z.enum([
   'SESSION_OPERATION_ABORTED',
 ]) satisfies z.ZodType<SessionResumeErrorCode>
 
+const workspaceTarget = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('source'), activeCwd: absolutePath, workspacePath: absolutePath.optional() }).strict(),
+  z.object({ kind: z.literal('replacement'), activeCwd: absolutePath, workspacePath: absolutePath }).strict(),
+  z.object({ kind: z.literal('unbound') }).strict(),
+]) as unknown as z.ZodType<ExternalSessionWorkspaceTarget>
+
 export const externalSessionErrorSchema = z.object({
   code: errorCode,
   message: nonBlankString,
@@ -66,6 +73,7 @@ const recordFields = {
   dshSessionId: nonBlankString.transform(value => SessionId(value)),
   cwd: absolutePath,
   projectPath: absolutePath.optional(),
+  workspaceTarget: workspaceTarget.optional(),
   title: nonBlankString.optional(),
   sourcePath: absolutePath,
   importFingerprint: nonBlankString,

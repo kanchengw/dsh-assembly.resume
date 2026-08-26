@@ -77,7 +77,7 @@ describe('session-resume settings entry', () => {
     const component = readFileSync(resolve('src/client/ResumeSettingsSection.tsx'), 'utf8')
     const styles = readFileSync(resolve('src/client/ResumeSettingsSection.module.css'), 'utf8')
 
-    expect(zh.description).toBe('将其他 Agent 的会话导入到 DeepSeek Harness。')
+    expect(zh.description).toBe('将本地其他 Agent 会话导入到DeepSeek Harness。')
     expect(zh.empty).toBe('没有找到可转接的会话')
     expect(en.description).toBe('Import local sessions from other agents into DeepSeek Harness.')
     expect(zh.agent).toBe('选择 Agent')
@@ -126,5 +126,33 @@ describe('session-resume settings entry', () => {
     expect(locales).toContain("claudeCodeDesktop: 'Claude Desktop'")
     expect(component).toContain("setProvider('claude-code-desktop')")
     expect(component).toContain("t('claudeCodeDesktop' as SessionResumeKey)")
+  })
+
+  it('offers a replacement workspace without treating a missing source path as an error', () => {
+    const component = readFileSync(resolve('src/client/ResumeSettingsSection.tsx'), 'utf8')
+    const styles = readFileSync(resolve('src/client/ResumeSettingsSection.module.css'), 'utf8')
+
+    expect(zh.workspaceMissing).toBe('原工作区已不存在')
+    expect(zh.workspaceMissingHint).toBe('会话仍可导入。不选择目录时，会话将以未绑定状态导入；也可以选择一个本地目录作为新的工作区。')
+    expect(zh.chooseWorkspace).toBe('绑定本地目录为工作区')
+    expect(zh.changeWorkspace).toBe('更换本地目录')
+    expect(zh.replacementWorkspace).toBe('新工作区目录')
+    expect(zh.replacementWorkspaceHint).toBe('该目录将注册或复用为 DSH 工作区，并绑定到导入会话。')
+    expect(zh.workspaceAutoBind).toBe('将自动绑定')
+    expect(component).toContain('selected.projectPathAvailable !== false')
+    expect(component).toContain("'chooseWorkspace'")
+    expect(component).toContain("t('replacementWorkspaceHint' as SessionResumeKey)")
+    expect(component).toContain('className={css.notice}')
+    expect(styles).toContain('.notice')
+    expect(styles).toContain('@media (max-width: 600px)')
+  })
+
+  it('lets an unscoped native session bind a local directory before import', () => {
+    const component = readFileSync(resolve('src/client/ResumeSettingsSection.tsx'), 'utf8')
+
+    expect(zh.noOriginalWorkspace).toBe('原会话未关联工作区')
+    expect(zh.noOriginalWorkspaceHint).toBe('可以直接以未绑定状态导入，也可以绑定一个本地目录作为工作区。')
+    expect(component).toContain("t('noOriginalWorkspace' as SessionResumeKey)")
+    expect(component).toContain("t('noOriginalWorkspaceHint' as SessionResumeKey)")
   })
 })

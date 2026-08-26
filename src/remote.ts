@@ -26,6 +26,7 @@ const discovered = z.object({
   externalSessionId: z.string(),
   cwd: z.string(),
   projectPath: z.string().optional(),
+  projectPathAvailable: z.boolean().optional(),
   sourcePath: z.string(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
@@ -43,9 +44,19 @@ const discoverInput = z.object({
 const record = z.object({
   recordId: z.string(), provider, externalSessionId: z.string(), dshSessionId: z.string(), cwd: z.string(),
   projectPath: z.string().optional(), title: z.string().optional(), sourcePath: z.string(), importFingerprint: z.string(),
+  workspaceTarget: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('source'), activeCwd: z.string(), workspacePath: z.string().optional() }),
+    z.object({ kind: z.literal('replacement'), activeCwd: z.string(), workspacePath: z.string() }),
+    z.object({ kind: z.literal('unbound') }),
+  ]).optional(),
   status: z.string(), createdAt: z.string(), updatedAt: z.string(), lastError: z.unknown().optional(),
 })
-const takeoverInput = z.object({ provider, externalSessionId: z.string(), agentOptions: z.object({ provider: z.string().optional(), model: z.string().optional(), maxTokens: z.number().int().positive().optional() }).optional() })
+const takeoverInput = z.object({
+  provider,
+  externalSessionId: z.string(),
+  agentOptions: z.object({ provider: z.string().optional(), model: z.string().optional(), maxTokens: z.number().int().positive().optional() }).optional(),
+  targetWorkspacePath: z.string().optional(),
+})
 const takeoverResult = z.object({ record, dshSessionId: z.string(), reused: z.boolean() })
 const agentId = json('@deepseek-ai/dsh-session/types#SessionId', z.string())
 

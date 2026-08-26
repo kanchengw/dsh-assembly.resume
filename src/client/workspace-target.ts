@@ -6,6 +6,12 @@ type SessionPort = {
   create(options: { workspaceId?: WorkspaceView['workspaceId']; sessionId?: SessionId }): Promise<SessionId>
 }
 
+export type OpenDshTargetResult = {
+  readonly sessionId: SessionId
+  readonly status: 'bound' | 'unbound'
+  readonly reason?: string
+}
+
 function normalizePath(value: string): string {
   const normalized = value.trim().replaceAll('\\', '/').replace(/\/+$/u, '')
   return /^[a-z]:\//iu.test(normalized) ? normalized.toLowerCase() : normalized
@@ -22,21 +28,31 @@ export async function openDshTargetSession(
   sessions: SessionPort,
   sessionId: SessionId,
   projectPath: string | undefined,
-): Promise<SessionId> {
+): Promise<OpenDshTargetResult> {
   if (projectPath === undefined) {
     sessions.open(sessionId)
-    return sessionId
+    return { sessionId, status: 'unbound' }
   }
 
-  const existingWorkspace = workspaceAtPath(workspaces.list.getSnapshot().items, projectPath)
-  // DSH Host requires exact cwd strings when attaching an existing session.
-  if (existingWorkspace !== undefined && existingWorkspace.path !== projectPath) {
+  try {
+    const existingWorkspace = workspaceAtPath(workspaces.list.getSnapshot().items, projectPath)
+    // DSH Host requires exact cwd strings when attaching an existing session.
+    if (existingWorkspace !== undefined && existingWorkspace.path !== projectPath) {
+      sessions.open(sessionId)
+      return { sessionId, status: 'unbound', reason: 'Workspace path does not exactly match the imported session cwd.' }
+    }
+
+    const workspace = existingWorkspace ?? await workspaces.create({ path: projectPath })
+    if (workspace.path !== projectPath) {
+      sessions.open(sessionId)
+      return { sessionId, status: 'unbound', reason: 'Workspace path does not exactly match the imported session cwd.' }
+    }
+    await sessions.create({ workspaceId: workspace.workspaceId, sessionId })
     sessions.open(sessionId)
-    return sessionId
+    return { sessionId, status: 'bound' }
+  } catch (cause) {
+    const reason = cause instanceof Error ? cause.message : String(cause)
+    sessions.open(sessionId)
+    return { sessionId, status: 'unbound', reason }
   }
-
-  const workspace = existingWorkspace ?? await workspaces.create({ path: projectPath })
-  await sessions.create({ workspaceId: workspace.workspaceId, sessionId })
-  sessions.open(sessionId)
-  return sessionId
 }

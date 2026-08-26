@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { realpath, stat } from 'node:fs/promises'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import s from '@deepseek-ai/schemastery'
@@ -20,6 +21,7 @@ import type {
   ExternalSessionResumeService,
   ExternalSessionStatus,
   ExternalSessionUpdate,
+  ExternalSessionWorkspaceTarget,
   FindExternalSessionQuery,
   InspectExternalSessionInput,
   NativeTranscriptSnapshot,
@@ -119,6 +121,46 @@ function ownerIdOf(value: string): SessionOwnerId {
   return value as SessionOwnerId
 }
 
+async function existingDirectory(path: string): Promise<string | undefined> {
+  try {
+    const canonical = await realpath(path)
+    return (await stat(canonical)).isDirectory() ? canonical : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function resolveWorkspaceTarget(
+  session: DiscoveredExternalSession,
+  replacement: string | undefined,
+): Promise<ExternalSessionWorkspaceTarget> {
+  if (replacement !== undefined) {
+    const path = await existingDirectory(replacement)
+    if (path === undefined) {
+      throw new SessionResumeError('SESSION_OPERATION_ABORTED', `replacement workspace '${replacement}' is not an existing directory`)
+    }
+    return { kind: 'replacement', activeCwd: path, workspacePath: path }
+  }
+  if (session.projectPath !== undefined) {
+    const path = await existingDirectory(session.projectPath)
+    return path === undefined ? { kind: 'unbound' } : { kind: 'source', activeCwd: path, workspacePath: path }
+  }
+  const cwd = await existingDirectory(session.cwd)
+  return cwd === undefined ? { kind: 'unbound' } : { kind: 'source', activeCwd: cwd }
+}
+
+function targetKey(target: ExternalSessionWorkspaceTarget): string {
+  return target.kind === 'unbound' ? '\0' : `${target.activeCwd}\0${target.workspacePath ?? ''}`
+}
+
+function recordTarget(record: ExternalSessionRecord): ExternalSessionWorkspaceTarget {
+  return record.workspaceTarget ?? {
+    kind: 'source',
+    activeCwd: record.cwd,
+    ...(record.projectPath === undefined ? {} : { workspacePath: record.projectPath }),
+  }
+}
+
 function tokenOf(value: string): SessionLeaseToken {
   return value as SessionLeaseToken
 }
@@ -198,8 +240,11 @@ export class SessionResumeService extends TypertRemoteService implements Externa
 
   private async takeOverWith(agents: AgentRegistry, agentOptions: AgentOptions, input: TakeOverExternalSessionInput): Promise<TakeOverResult> {
     const snapshot = await this.inspect(input)
+    const workspaceTarget = await resolveWorkspaceTarget(snapshot.session, input.targetWorkspacePath)
     const existing = (await this.find({ provider: input.provider, externalSessionId: input.externalSessionId }))
-      .find(record => record.importFingerprint === snapshot.fingerprint && record.status !== 'closed')
+      .find(record => record.importFingerprint === snapshot.fingerprint
+        && targetKey(recordTarget(record)) === targetKey(workspaceTarget)
+        && record.status !== 'closed')
     if (existing !== undefined) {
       await this.ensureLiveAgent(agents, existing.dshSessionId, agentOptions)
       return { record: existing, dshSessionId: existing.dshSessionId, reused: true }
@@ -217,14 +262,14 @@ export class SessionResumeService extends TypertRemoteService implements Externa
       handle = await agents.create({
         sessionId: dshSessionId,
         seed,
-        meta: { cwd: snapshot.session.cwd },
+        meta: workspaceTarget.kind === 'unbound' ? {} : { cwd: workspaceTarget.activeCwd },
         agentOptions,
       })
     } catch (error: unknown) {
       throw new SessionResumeError('RESUME_DSH_AGENT_START_FAILED', error instanceof Error ? error.message : String(error), undefined, { cause: error })
     }
     try {
-      const record = await this.createBinding(snapshot, dshSessionId)
+      const record = await this.createBinding(snapshot, dshSessionId, workspaceTarget)
       return { record, dshSessionId, reused: false }
     } catch (error: unknown) {
       await handle?.dispose()
@@ -266,7 +311,11 @@ export class SessionResumeService extends TypertRemoteService implements Externa
     if (this.autoRecover) await this.enqueue(() => this.recoverAbandonedOwnership())
   }
 
-  private async createBinding(snapshot: NativeTranscriptSnapshot, dshSessionId: SessionId): Promise<ExternalSessionRecord> {
+  private async createBinding(
+    snapshot: NativeTranscriptSnapshot,
+    dshSessionId: SessionId,
+    workspaceTarget: ExternalSessionWorkspaceTarget,
+  ): Promise<ExternalSessionRecord> {
     return this.enqueue(async () => {
       this.assertMutationAdmission()
       const timestamp = now()
@@ -277,6 +326,7 @@ export class SessionResumeService extends TypertRemoteService implements Externa
         dshSessionId,
         cwd: snapshot.session.cwd,
         ...(snapshot.session.projectPath === undefined ? {} : { projectPath: snapshot.session.projectPath }),
+        workspaceTarget,
         ...(snapshot.session.title === undefined ? {} : { title: snapshot.session.title }),
         sourcePath: snapshot.session.sourcePath,
         importFingerprint: snapshot.fingerprint,

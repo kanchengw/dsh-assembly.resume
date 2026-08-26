@@ -12,7 +12,7 @@ import type { ExternalProvider, DiscoveredExternalSession, TakeOverResult } from
 import { ResumeSettingsSection } from './ResumeSettingsSection.tsx'
 import { en, zh } from './locales.ts'
 import { getSessionResumeRemote } from './remote-access.ts'
-import { openDshTargetSession } from './workspace-target.ts'
+import { openDshTargetSession, type OpenDshTargetResult } from './workspace-target.ts'
 
 const NS = 'sessionResume'
 
@@ -37,13 +37,14 @@ function createSectionProps(ctx: ClientContext) {
       if (!result.ok) throw new Error(result.error.message)
       return [...result.value]
     },
-    takeOver: async (input: { provider: ExternalProvider; externalSessionId: string }): Promise<TakeOverResult> => {
+    takeOver: async (input: { provider: ExternalProvider; externalSessionId: string; targetWorkspacePath?: string }): Promise<TakeOverResult> => {
       const result = await remote().takeOverStandalone({ ...input, externalSessionId: input.externalSessionId as never })
       if (!result.ok) throw new Error(result.error.message)
       return result.value
     },
-    openTarget: async (targetSessionId: SessionId, projectPath: string | undefined): Promise<void> => {
-      await openDshTargetSession(workspaces, sessions, targetSessionId, projectPath)
+    chooseWorkspace: (): Promise<string | null> => workspaces.pickDirectory(),
+    openTarget: (targetSessionId: SessionId, projectPath: string | undefined): Promise<OpenDshTargetResult> => {
+      return openDshTargetSession(workspaces, sessions, targetSessionId, projectPath)
     },
   }
 }

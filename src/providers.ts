@@ -89,6 +89,10 @@ function codexProjectPath(cwd: string, newChatRoot: string): string | undefined 
   return cwd
 }
 
+async function directoryAvailable(path: string): Promise<boolean> {
+  return stat(path).then(value => value.isDirectory(), () => false)
+}
+
 function isCodexSubagent(payload: Record<string, unknown> | undefined): boolean {
   return payload?.['thread_source'] === 'subagent' || record(payload?.['source'])?.['subagent'] !== undefined
 }
@@ -696,17 +700,20 @@ export async function discoverExternalSessions(input: DiscoverExternalSessionsIn
   const claudeSessions = wantsClaude ? await discoverClaude(claudeRoot) : []
   const desktopMetadata = wantsClaude ? await readClaudeDesktopMetadata(claudeDesktopRoots) : []
   const nativeDesktopCliIds = new Set(desktopMetadata.filter(entry => !entry.importedFromCli).map(entry => entry.cliSessionId))
-  const rows = [
+  const discovered = [
     ...(providers.includes('codex') ? await discoverCodex(codexRoot, codexIndex, config.codexNewChatRoot) : []),
     ...(providers.includes('claude-code') ? claudeSessions.filter(session => !nativeDesktopCliIds.has(session.externalSessionId)) : []),
     ...(providers.includes('claude-code-desktop') ? discoverClaudeDesktop(desktopMetadata, claudeSessions) : []),
   ]
   const query = input.query?.trim().toLowerCase()
-  return rows
+  const rows = discovered
     .filter(row => input.cwd === undefined || normalize(row.cwd) === normalize(input.cwd))
     .filter(row => query === undefined || [row.externalSessionId, row.title, row.firstUserMessage, row.lastUserMessage, row.cwd].some(value => value?.toLowerCase().includes(query)))
     .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
     .slice(0, input.limit ?? DEFAULT_LIMIT)
+  return Promise.all(rows.map(async session => session.projectPath === undefined
+    ? session
+    : { ...session, projectPathAvailable: await directoryAvailable(session.projectPath) }))
 }
 
 /** Read and normalize one selected native transcript. */

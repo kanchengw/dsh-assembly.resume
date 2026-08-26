@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -61,11 +61,17 @@ describe('DSH takeover', () => {
     })
 
     expect(result.reused).toBe(false)
-    expect(result.record).toMatchObject({ provider: 'codex', externalSessionId: 'native-1', status: 'ready' })
+    const canonicalProject = await realpath(join(root, 'project'))
+    expect(result.record).toMatchObject({
+      provider: 'codex',
+      externalSessionId: 'native-1',
+      status: 'ready',
+      workspaceTarget: { kind: 'source', activeCwd: canonicalProject, workspacePath: canonicalProject },
+    })
     expect(runtime.created).toHaveLength(1)
     expect(runtime.created[0]).toMatchObject({
       sessionId: result.dshSessionId,
-      meta: { cwd: join(root, 'project') },
+      meta: { cwd: canonicalProject },
       agentOptions: { provider: 'mock', model: 'mock' },
     })
     expect(runtime.created[0]?.seed?.map(event => event.type)).toEqual([
@@ -102,6 +108,91 @@ describe('DSH takeover', () => {
     expect(second).toMatchObject({ reused: true, dshSessionId: first.dshSessionId })
     expect(runtime.created).toHaveLength(1)
     expect(runtime.resumed).toHaveLength(0)
+  })
+
+  it('imports a session with a missing source workspace without retaining the stale cwd', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-missing-workspace-'))
+    const missingCwd = join(root, 'deleted-project')
+    await writeFile(join(root, 'session.jsonl'), [
+      JSON.stringify({ type: 'session_meta', payload: { session_id: 'native-missing-workspace', cwd: missingCwd } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'continue elsewhere' } }),
+    ].join('\n'))
+    const { ctx, runtime } = await mount(root)
+
+    const result = await ctx.sessionResume.takeOverStandalone({
+      provider: 'codex',
+      externalSessionId: 'native-missing-workspace' as never,
+    })
+
+    expect(runtime.created[0]?.meta).toEqual({})
+    expect(result.record).toMatchObject({
+      cwd: missingCwd,
+      projectPath: missingCwd,
+      workspaceTarget: { kind: 'unbound' },
+    })
+  })
+
+  it('uses an explicit replacement workspace while preserving source provenance', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-replacement-workspace-'))
+    const missingCwd = join(root, 'deleted-project')
+    const replacement = join(root, 'replacement')
+    await mkdir(replacement)
+    await writeFile(join(root, 'session.jsonl'), [
+      JSON.stringify({ type: 'session_meta', payload: { session_id: 'native-replacement-workspace', cwd: missingCwd } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'continue in replacement' } }),
+    ].join('\n'))
+    const { ctx, runtime } = await mount(root)
+
+    const result = await ctx.sessionResume.takeOverStandalone({
+      provider: 'codex',
+      externalSessionId: 'native-replacement-workspace' as never,
+      targetWorkspacePath: replacement,
+    })
+
+    const canonicalReplacement = await realpath(replacement)
+    expect(runtime.created[0]?.meta).toEqual({ cwd: canonicalReplacement })
+    expect(result.record).toMatchObject({
+      cwd: missingCwd,
+      projectPath: missingCwd,
+      workspaceTarget: { kind: 'replacement', activeCwd: canonicalReplacement, workspacePath: canonicalReplacement },
+    })
+  })
+
+  it('does not reuse an unbound import when a replacement workspace is later selected', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-target-idempotency-'))
+    const missingCwd = join(root, 'deleted-project')
+    const replacement = join(root, 'replacement')
+    await mkdir(replacement)
+    await writeFile(join(root, 'session.jsonl'), [
+      JSON.stringify({ type: 'session_meta', payload: { session_id: 'native-target-idempotency', cwd: missingCwd } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'continue with target semantics' } }),
+    ].join('\n'))
+    const { ctx, runtime } = await mount(root)
+
+    const unbound = await ctx.sessionResume.takeOverStandalone({
+      provider: 'codex', externalSessionId: 'native-target-idempotency' as never,
+    })
+    const rebound = await ctx.sessionResume.takeOverStandalone({
+      provider: 'codex', externalSessionId: 'native-target-idempotency' as never, targetWorkspacePath: replacement,
+    })
+
+    expect(rebound.reused).toBe(false)
+    expect(rebound.dshSessionId).not.toBe(unbound.dshSessionId)
+    expect(runtime.created).toHaveLength(2)
+  })
+
+  it('rejects a missing replacement workspace before creating a DSH session', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-invalid-replacement-'))
+    await createCodexSession(root)
+    const { ctx, runtime } = await mount(root)
+    const missingReplacement = join(root, 'missing-replacement')
+
+    await expect(ctx.sessionResume.takeOverStandalone({
+      provider: 'codex',
+      externalSessionId: 'native-1' as never,
+      targetWorkspacePath: missingReplacement,
+    })).rejects.toMatchObject({ code: 'SESSION_OPERATION_ABORTED' })
+    expect(runtime.created).toHaveLength(0)
   })
 
   it('reopens the DSH Agent from the persisted binding without a native resume command', async () => {
