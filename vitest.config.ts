@@ -1,8 +1,6 @@
 import { defineConfig } from 'vitest/config'
-import { resolve } from 'node:path'
 import ts from 'typescript'
 
-const dshRoot = resolve('..', '..', 'deepseek-harness')
 const decoratorSyntax = /^\s*@[A-Za-z_$][\w$]*/m
 
 function standardDecoratorPlugin() {
@@ -31,25 +29,6 @@ function standardDecoratorPlugin() {
 
 export default defineConfig({
   plugins: [standardDecoratorPlugin()],
-  resolve: {
-    alias: {
-      '@deepseek-ai/cordis': resolve(dshRoot, 'vendor/cordis/src'),
-      '@deepseek-ai/cosmokit': resolve(dshRoot, 'vendor/cosmokit/src'),
-      '@deepseek-ai/schemastery': resolve(dshRoot, 'vendor/schemastery/src'),
-      '@deepseek-ai/dsh-brand': resolve(dshRoot, 'packages/util/brand/src'),
-      '@deepseek-ai/dsh-agent': resolve(dshRoot, 'packages/core/agent/src'),
-      '@deepseek-ai/dsh-invariants': resolve(dshRoot, 'packages/runtime-diagnostics/invariants/src'),
-      '@deepseek-ai/dsh-llm': resolve(dshRoot, 'packages/llm/llm/src'),
-      '@deepseek-ai/dsh-llm/message': resolve(dshRoot, 'packages/llm/llm/src/message.ts'),
-      '@deepseek-ai/dsh-llm/types': resolve(dshRoot, 'packages/llm/llm/src/types.ts'),
-      '@deepseek-ai/dsh-session': resolve(dshRoot, 'packages/core/session/src'),
-      '@deepseek-ai/dsh-scope': resolve(dshRoot, 'packages/core/scope/src'),
-      '@deepseek-ai/dsh-timeout': resolve(dshRoot, 'packages/util/timeout/src'),
-      '@deepseek-ai/dsh-storage': resolve(dshRoot, 'packages/storage/storage/src'),
-      '@deepseek-ai/dsh-storage-domain': resolve(dshRoot, 'packages/storage/storage-domain/src'),
-      '@deepseek-ai/dsh-typert-protocol': resolve(dshRoot, 'packages/typert/protocol/src'),
-    },
-  },
   ssr: {
     noExternal: true,
   },
