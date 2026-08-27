@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto'
-import { homedir } from 'node:os'
-import { readdir, readFile, stat } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, normalize } from 'node:path'
+import { readFile, stat } from 'node:fs/promises'
+import {
+  discoverNativeSessions,
+  type NativeSessionDiscoveryConfig,
+  type NativeSessionSummary,
+} from 'dsh-assembly.core/native-session'
 import type {
   DiscoveredExternalSession,
   DiscoverExternalSessionsInput,
@@ -20,100 +23,16 @@ export class NativeSessionNotFoundError extends Error {
 import type { NativeContentBlock, NativeSemanticEvent, NativeToolCall } from './transcript.ts'
 
 const MAX_FILE_BYTES = 32 * 1024 * 1024
-const MAX_PREVIEW_CHARS = 400
-const MAX_TITLE_CHARS = 80
-const DEFAULT_LIMIT = 100
 // Bump when the semantic import contract changes so old seeded sessions are not reused.
 const IMPORT_FINGERPRINT_VERSION = '8'
 
 /** Environment and local-store options for the supported native surfaces. */
-export interface ProviderConfig {
-  readonly codexHome?: string
-  readonly codexIndex?: string
-  readonly codexNewChatRoot?: string
-  readonly claudeHome?: string
-  /** Claude Desktop's metadata-only session index root. */
-  readonly claudeDesktopHome?: string
-}
-
-function bounded(value: string | undefined): string | undefined {
-  if (value === undefined) return undefined
-  const normalized = value.replace(/\s+/gu, ' ').trim()
-  if (normalized.length === 0) return undefined
-  return normalized.length <= MAX_PREVIEW_CHARS
-    ? normalized
-    : `${normalized.slice(0, MAX_PREVIEW_CHARS - 1)}…`
-}
-
-function titleFromMessage(value: string | undefined): string | undefined {
-  const normalized = bounded(value)
-  if (normalized === undefined) return undefined
-  return normalized.length <= MAX_TITLE_CHARS
-    ? normalized
-    : `${normalized.slice(0, MAX_TITLE_CHARS - 1)}…`
-}
+export type ProviderConfig = NativeSessionDiscoveryConfig
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined
-}
-
-function sessionIdOf(value: unknown): ExternalSessionId | undefined {
-  return typeof value === 'string' && value.trim().length > 0 ? value as ExternalSessionId : undefined
-}
-
-function cwdOf(value: unknown): string | undefined {
-  return typeof value === 'string' && isAbsolute(value) ? normalize(value) : undefined
-}
-
-function comparablePath(value: string): string {
-  const normalized = value.replaceAll('\\', '/').replace(/\/+$/u, '')
-  return /^[a-z]:\//iu.test(normalized) ? normalized.toLowerCase() : normalized
-}
-
-function isUnderPath(candidate: string, root: string): boolean {
-  const child = comparablePath(candidate)
-  const parent = comparablePath(root)
-  return child === parent || child.startsWith(`${parent}/`)
-}
-
-function codexProjectPath(cwd: string, newChatRoot: string): string | undefined {
-  if (isUnderPath(cwd, newChatRoot)) {
-    const relative = comparablePath(cwd).slice(comparablePath(newChatRoot).length).replace(/^\/+|\/+$/gu, '')
-    const [dateSegment] = relative.split('/')
-    if (/^\d{4}-\d{2}-\d{2}$/u.test(dateSegment ?? '')) return undefined
-  }
-  const normalized = comparablePath(cwd)
-  if (/\/AppData\/Roaming\/AionUi\/aionui\/conversations\/users\//iu.test(normalized)) return undefined
-  return cwd
-}
-
-async function directoryAvailable(path: string): Promise<boolean> {
-  return stat(path).then(value => value.isDirectory(), () => false)
-}
-
-function isCodexSubagent(payload: Record<string, unknown> | undefined): boolean {
-  return payload?.['thread_source'] === 'subagent' || record(payload?.['source'])?.['subagent'] !== undefined
-}
-
-async function filesUnder(root: string, suffix = '.jsonl'): Promise<string[]> {
-  const result: string[] = []
-  const visit = async (directory: string): Promise<void> => {
-    let entries
-    try {
-      entries = await readdir(directory, { withFileTypes: true })
-    } catch {
-      return
-    }
-    for (const entry of entries) {
-      const path = join(directory, entry.name)
-      if (entry.isDirectory()) await visit(path)
-      else if (entry.isFile() && path.endsWith(suffix)) result.push(path)
-    }
-  }
-  await visit(root)
-  return result
 }
 
 async function readJsonl(path: string, strict: boolean): Promise<{ rows: unknown[]; sourceRevision?: string }> {
@@ -147,56 +66,6 @@ async function readJsonl(path: string, strict: boolean): Promise<{ rows: unknown
     .update(`\0${fileSize}\0${modifiedAt}`)
     .digest('hex')
   return { rows, sourceRevision }
-}
-
-interface CodexIndexEntry {
-  readonly title?: string
-  readonly updatedAt?: string
-}
-
-async function readJsonRecord(path: string): Promise<Record<string, unknown> | undefined> {
-  try {
-    const file = await stat(path)
-    if (file.size > MAX_FILE_BYTES) return undefined
-    return record(JSON.parse(await readFile(path, 'utf8')) as unknown)
-  } catch {
-    return undefined
-  }
-}
-
-interface DiscoveredSessionCandidate {
-  readonly session: DiscoveredExternalSession
-  readonly modifiedAt: number
-}
-
-/** Keep one canonical transcript when a provider retains copied session files. */
-function deduplicateSessions(candidates: readonly DiscoveredSessionCandidate[]): DiscoveredExternalSession[] {
-  const unique = new Map<string, DiscoveredSessionCandidate>()
-  for (const candidate of candidates) {
-    const key = `${candidate.session.provider}\0${candidate.session.externalSessionId}`
-    const previous = unique.get(key)
-    if (previous === undefined
-      || candidate.modifiedAt > previous.modifiedAt
-      || (candidate.modifiedAt === previous.modifiedAt && candidate.session.sourcePath > previous.session.sourcePath)) {
-      unique.set(key, candidate)
-    }
-  }
-  return [...unique.values()].map(candidate => candidate.session)
-}
-
-async function readCodexIndex(path: string): Promise<Map<ExternalSessionId, CodexIndexEntry>> {
-  const entries = new Map<ExternalSessionId, CodexIndexEntry>()
-  for (const row of (await readJsonl(path, false)).rows) {
-    const value = record(row)
-    const id = sessionIdOf(value?.['id'] ?? value?.['session_id'])
-    if (id === undefined) continue
-    const title = titleFromMessage(typeof value?.['thread_name'] === 'string'
-      ? value['thread_name']
-      : typeof value?.['title'] === 'string' ? value['title'] : undefined)
-    const updatedAt = typeof value?.['updated_at'] === 'string' ? value['updated_at'] : undefined
-    entries.set(id, { ...(title === undefined ? {} : { title }), ...(updatedAt === undefined ? {} : { updatedAt }) })
-  }
-  return entries
 }
 
 function textFromUnknown(value: unknown): string | undefined {
@@ -457,24 +326,6 @@ function claudeTurn(
   return state.current
 }
 
-function isoTime(value: unknown): string | undefined {
-  const timestamp = eventTime(value, Number.NaN)
-  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : undefined
-}
-
-/** Read only Codex event shapes that represent an actual submitted user prompt. */
-function codexPreviewText(row: Record<string, unknown>, meta: Record<string, unknown> | undefined): string | undefined {
-  if (row['type'] !== 'event_msg') return undefined
-  const payload = record(row['payload'])
-  if (isCodexLegacyExecTask(payload, meta)) return undefined
-  if (payload?.['type'] === 'user_message') {
-    return bounded(codexUserContent(payload['message']).map(block => block.text).join(''))
-  }
-  const item = record(payload?.['item'])
-  if (payload?.['type'] !== 'item_completed' || item?.['type'] !== 'UserMessage') return undefined
-  return bounded(codexUserContent(item['content']).map(block => block.text).join(''))
-}
-
 /** Parse Claude Code JSONL into model-visible semantic events. */
 export function parseClaudeTranscript(rows: readonly unknown[]): NativeSemanticEvent[] {
   const events: NativeSemanticEvent[] = []
@@ -537,183 +388,27 @@ export function parseClaudeTranscript(rows: readonly unknown[]): NativeSemanticE
   return events
 }
 
-async function discoverCodex(root: string, indexPath?: string, newChatRoot = join(homedir(), 'Documents', 'Codex')): Promise<DiscoveredExternalSession[]> {
-  const result: DiscoveredSessionCandidate[] = []
-  const index = indexPath === undefined ? new Map<ExternalSessionId, CodexIndexEntry>() : await readCodexIndex(indexPath)
-  for (const path of await filesUnder(root)) {
-    const rows = (await readJsonl(path, false)).rows
-    const meta = rows.map(record).find(row => row?.['type'] === 'session_meta')
-    const payload = record(meta?.['payload'])
-    if (isCodexSubagent(payload)) continue
-    const sessionId = sessionIdOf(payload?.['id'] ?? payload?.['session_id'])
-    const cwd = cwdOf(payload?.['cwd'])
-    if (sessionId === undefined || cwd === undefined) continue
-    const users: string[] = []
-    let hasLegacyExecTask = false
-    for (const row of rows.map(record)) {
-      if (row === undefined) continue
-      const rowPayload = record(row['payload'])
-      if (isCodexLegacyExecTask(rowPayload, payload)) hasLegacyExecTask = true
-      const text = codexPreviewText(row, payload)
-      if (text !== undefined) users.push(text)
-    }
-    if (users.length === 0 && hasLegacyExecTask) continue
-    const file = await stat(path).catch(() => undefined)
-    const indexEntry = index.get(sessionId)
-    const title = indexEntry?.title ?? titleFromMessage(users[0])
-    const lastUser = users.at(-1)
-    const projectPath = codexProjectPath(cwd, newChatRoot)
-    result.push({
-      modifiedAt: file?.mtimeMs ?? 0,
-      session: {
-        provider: 'codex', externalSessionId: sessionId, cwd,
-        ...(projectPath === undefined ? {} : { projectPath }), sourcePath: path,
-        ...(typeof payload?.['timestamp'] === 'string' ? { createdAt: payload['timestamp'] } : {}),
-        ...(indexEntry?.updatedAt !== undefined ? { updatedAt: indexEntry.updatedAt } : file === undefined ? {} : { updatedAt: file.mtime.toISOString() }),
-        ...(title === undefined ? {} : { title }),
-        ...(users[0] === undefined ? {} : { firstUserMessage: users[0] }),
-        ...(lastUser === undefined ? {} : { lastUserMessage: lastUser }),
-        resumable: true,
-      },
-    })
+function toDiscoveredExternalSession(session: NativeSessionSummary): DiscoveredExternalSession {
+  return {
+    provider: session.provider,
+    externalSessionId: session.nativeSessionId as unknown as ExternalSessionId,
+    cwd: session.cwd,
+    ...(session.projectPath === undefined ? {} : { projectPath: session.projectPath }),
+    ...(session.projectPathAvailable === undefined ? {} : { projectPathAvailable: session.projectPathAvailable }),
+    sourcePath: session.sourcePath,
+    ...(session.createdAt === undefined ? {} : { createdAt: session.createdAt }),
+    ...(session.updatedAt === undefined ? {} : { updatedAt: session.updatedAt }),
+    ...(session.title === undefined ? {} : { title: session.title }),
+    ...(session.firstUserMessage === undefined ? {} : { firstUserMessage: session.firstUserMessage }),
+    ...(session.lastUserMessage === undefined ? {} : { lastUserMessage: session.lastUserMessage }),
+    resumable: session.resumable,
   }
-  return deduplicateSessions(result)
-}
-
-async function discoverClaude(root: string): Promise<DiscoveredExternalSession[]> {
-  const result: DiscoveredSessionCandidate[] = []
-  for (const path of await filesUnder(root)) {
-    const rows = (await readJsonl(path, false)).rows
-    const first = rows.map(record).find(row => row?.['type'] === 'user')
-    const firstRecord = record(first)
-    const sessionId = sessionIdOf(firstRecord?.['sessionId'])
-    const cwd = cwdOf(firstRecord?.['cwd'])
-    if (sessionId === undefined || cwd === undefined) continue
-    const slug = rows.map(record).map(row => row?.['slug']).find((value): value is string => typeof value === 'string')
-    const users = rows.map(record).flatMap((row) => {
-      if (row?.['type'] !== 'user') return []
-      const text = bounded(textFromUnknown(record(row['message'])?.['content']))
-      return text === undefined ? [] : [text]
-    })
-    const file = await stat(path).catch(() => undefined)
-    const title = titleFromMessage(slug) ?? titleFromMessage(users[0])
-    const lastUser = users.at(-1)
-    result.push({
-      modifiedAt: file?.mtimeMs ?? 0,
-      session: {
-        provider: 'claude-code', externalSessionId: sessionId, cwd, projectPath: cwd, sourcePath: path,
-        ...(typeof firstRecord?.['timestamp'] === 'string' ? { createdAt: firstRecord['timestamp'] } : {}),
-        ...(file === undefined ? {} : { updatedAt: file.mtime.toISOString() }),
-        ...(title === undefined ? {} : { title }),
-        ...(users[0] === undefined ? {} : { firstUserMessage: users[0] }),
-        ...(lastUser === undefined ? {} : { lastUserMessage: lastUser }),
-        resumable: true,
-      },
-    })
-  }
-  return deduplicateSessions(result)
-}
-
-interface ClaudeDesktopMetadata {
-  readonly sessionId: ExternalSessionId
-  readonly cliSessionId: ExternalSessionId
-  readonly cwd?: string
-  readonly title?: string
-  readonly createdAt?: string
-  readonly updatedAt?: string
-  readonly archived: boolean
-  readonly importedFromCli: boolean
-  readonly modifiedAt: number
-}
-
-function defaultClaudeDesktopRoots(): string[] {
-  if (process.platform === 'win32') {
-    const roaming = process.env['APPDATA'] ?? join(homedir(), 'AppData', 'Roaming')
-    const roots = [join(roaming, 'Claude', 'claude-code-sessions')]
-    const local = process.env['LOCALAPPDATA']
-    if (local !== undefined) roots.push(join(local, 'Packages', 'Claude_pzs8sxrjxfjjc', 'LocalCache', 'Roaming', 'Claude', 'claude-code-sessions'))
-    return roots
-  }
-  if (process.platform === 'darwin') return [join(homedir(), 'Library', 'Application Support', 'Claude', 'claude-code-sessions')]
-  return []
-}
-
-async function readClaudeDesktopMetadata(roots: readonly string[]): Promise<ClaudeDesktopMetadata[]> {
-  const result = new Map<ExternalSessionId, ClaudeDesktopMetadata>()
-  for (const root of roots) {
-    for (const path of await filesUnder(root, '.json')) {
-      const value = await readJsonRecord(path)
-      const sessionId = sessionIdOf(value?.['sessionId'])
-      const cliSessionId = sessionIdOf(value?.['cliSessionId'])
-      if (sessionId === undefined || cliSessionId === undefined || !sessionId.startsWith('local_')) continue
-      const file = await stat(path).catch(() => undefined)
-      const cwd = cwdOf(value?.['cwd'] ?? value?.['originCwd'])
-      const title = titleFromMessage(typeof value?.['title'] === 'string' ? value['title'] : undefined)
-      const createdAt = isoTime(value?.['createdAt'])
-      const updatedAt = isoTime(value?.['lastActivityAt'] ?? value?.['lastFocusedAt'])
-      const metadata: ClaudeDesktopMetadata = {
-        sessionId,
-        cliSessionId,
-        ...(cwd === undefined ? {} : { cwd }),
-        ...(title === undefined ? {} : { title }),
-        ...(createdAt === undefined ? {} : { createdAt }),
-        ...(updatedAt === undefined ? {} : { updatedAt }),
-        archived: value?.['isArchived'] === true,
-        importedFromCli: sessionId === `local_${cliSessionId}`,
-        modifiedAt: file?.mtimeMs ?? 0,
-      }
-      const previous = result.get(sessionId)
-      if (previous === undefined || metadata.modifiedAt > previous.modifiedAt) result.set(sessionId, metadata)
-    }
-  }
-  return [...result.values()]
-}
-
-function discoverClaudeDesktop(metadata: readonly ClaudeDesktopMetadata[], transcripts: readonly DiscoveredExternalSession[]): DiscoveredExternalSession[] {
-  const byCliSessionId = new Map(transcripts.map(session => [session.externalSessionId, session]))
-  return metadata.flatMap((entry) => {
-    if (entry.archived || entry.importedFromCli) return []
-    const transcript = byCliSessionId.get(entry.cliSessionId)
-    if (transcript === undefined) return []
-    const cwd = entry.cwd ?? transcript.cwd
-    return [{
-      ...transcript,
-      provider: 'claude-code-desktop' as const,
-      externalSessionId: entry.sessionId,
-      cwd,
-      projectPath: cwd,
-      ...(entry.title === undefined ? {} : { title: entry.title }),
-      ...(entry.createdAt === undefined ? {} : { createdAt: entry.createdAt }),
-      ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
-    }]
-  })
 }
 
 /** Discover native sessions without loading complete transcripts into the API. */
 export async function discoverExternalSessions(input: DiscoverExternalSessionsInput = {}, config: ProviderConfig = {}): Promise<DiscoveredExternalSession[]> {
-  const codexRoot = config.codexHome ?? process.env['CODEX_HOME'] ?? join(homedir(), '.codex', 'sessions')
-  const codexIndex = config.codexIndex ?? join(basename(codexRoot).toLowerCase() === 'sessions' ? dirname(codexRoot) : codexRoot, 'session_index.jsonl')
-  const claudeRoot = config.claudeHome ?? process.env['CLAUDE_CONFIG_DIR'] ?? join(homedir(), '.claude', 'projects')
-  const claudeDesktopRoots = config.claudeDesktopHome === undefined ? defaultClaudeDesktopRoots() : [config.claudeDesktopHome]
-  const providers = input.provider === undefined ? ['codex', 'claude-code', 'claude-code-desktop'] as const : [input.provider]
-  const wantsClaude = providers.includes('claude-code') || providers.includes('claude-code-desktop')
-  const claudeSessions = wantsClaude ? await discoverClaude(claudeRoot) : []
-  const desktopMetadata = wantsClaude ? await readClaudeDesktopMetadata(claudeDesktopRoots) : []
-  const nativeDesktopCliIds = new Set(desktopMetadata.filter(entry => !entry.importedFromCli).map(entry => entry.cliSessionId))
-  const discovered = [
-    ...(providers.includes('codex') ? await discoverCodex(codexRoot, codexIndex, config.codexNewChatRoot) : []),
-    ...(providers.includes('claude-code') ? claudeSessions.filter(session => !nativeDesktopCliIds.has(session.externalSessionId)) : []),
-    ...(providers.includes('claude-code-desktop') ? discoverClaudeDesktop(desktopMetadata, claudeSessions) : []),
-  ]
-  const query = input.query?.trim().toLowerCase()
-  const rows = discovered
-    .filter(row => input.cwd === undefined || normalize(row.cwd) === normalize(input.cwd))
-    .filter(row => query === undefined || [row.externalSessionId, row.title, row.firstUserMessage, row.lastUserMessage, row.cwd].some(value => value?.toLowerCase().includes(query)))
-    .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
-    .slice(0, input.limit ?? DEFAULT_LIMIT)
-  return Promise.all(rows.map(async session => session.projectPath === undefined
-    ? session
-    : { ...session, projectPathAvailable: await directoryAvailable(session.projectPath) }))
+  const sessions = await discoverNativeSessions(input, config)
+  return sessions.map(toDiscoveredExternalSession)
 }
 
 /** Read and normalize one selected native transcript. */

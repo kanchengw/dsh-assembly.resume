@@ -343,11 +343,15 @@ C:/Users/example/AppData/Local/Temp/codex-clipboard.png`,
       JSON.stringify({ type: 'user', sessionId: 'claude-1', cwd, timestamp: '2026-08-23T00:00:00.000Z', message: { role: 'user', content: 'inspect repo' } }),
       JSON.stringify({ type: 'system', sessionId: 'claude-1', cwd, slug: 'inspect-repo' }),
       JSON.stringify({ type: 'assistant', sessionId: 'claude-1', cwd, message: { role: 'assistant', content: [{ type: 'text', text: 'private assistant detail' }] } }),
+      JSON.stringify({ type: 'user', sessionId: 'claude-1', cwd, isMeta: true, message: { role: 'user', content: 'synthetic compact context' } }),
+      JSON.stringify({ type: 'user', sessionId: 'claude-1', cwd, message: { role: 'user', content: [{ type: 'tool_result', content: 'private tool output' }] } }),
     ].join('\n'))
 
     const rows = await discoverExternalSessions({ provider: 'claude-code' }, { claudeHome: root })
     expect(rows).toEqual([expect.objectContaining({ provider: 'claude-code', externalSessionId: 'claude-1', title: 'inspect-repo', firstUserMessage: 'inspect repo' })])
     expect(JSON.stringify(rows)).not.toContain('private assistant detail')
+    expect(JSON.stringify(rows)).not.toContain('synthetic compact context')
+    expect(JSON.stringify(rows)).not.toContain('private tool output')
   })
 
   it('discovers native Claude Code Desktop metadata through its linked local transcript', async () => {

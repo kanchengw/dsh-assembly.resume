@@ -71,6 +71,9 @@
     "test:artifact": "node scripts/artifact-smoke.mjs",
     "verify": "pnpm typecheck && pnpm test && pnpm build && pnpm test:artifact"
   },
+  "dependencies": {
+    "dsh-assembly.core": "^0.1.1"
+  },
   "peerDependencies": {
     "@deepseek-ai/dsh-agent": "^0.1.1-rc.2",
     "@deepseek-ai/cordis": "^4.0.1",

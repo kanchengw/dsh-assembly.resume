@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      dsh-assembly.core:
+        specifier: ^0.1.1
+        version: 0.1.1
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: 4.0.1
@@ -980,6 +984,10 @@ packages:
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
+
+  dsh-assembly.core@0.1.1:
+    resolution: {integrity: sha512-7r+JhsSoysn44z3HKkbXGacmKnErF1TmUnkJNB7UMZ5Q6t6ktmwfcT5CaXQ/TxHLhlMLolMU0MMEAfAVRPAb/g==}
+    engines: {node: '>=22.19.0'}
 
   dts-resolver@3.0.0:
     resolution: {integrity: sha512-1T1f+z+4tl9XD+m+0HBgWoL/nm0bOIffyWaUuUSBlFg/86IWvfx+wjNaO/ybU0AJzG9/Mi5hBUgGV6zCmWEN7Q==}
@@ -2185,6 +2193,8 @@ snapshots:
   defu@6.1.7: {}
 
   detect-libc@2.1.2: {}
+
+  dsh-assembly.core@0.1.1: {}
 
   dts-resolver@3.0.0: {}
 
