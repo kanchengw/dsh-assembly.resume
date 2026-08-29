@@ -14,6 +14,8 @@ with the DSH Agent.
 - If the historical path no longer exists or the original conversation had no workspace, a new workspace can be specified during handoff. Otherwise, the conversation imports unbound and the old directory is never recreated.
 - Continue the conversation in DSH after transfer.
 
+![Session Resume settings](assets/ScreenShot_config.png)
+
 ## Installation
 
 Install the package from npm:
