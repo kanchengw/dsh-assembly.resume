@@ -1,7 +1,5 @@
 # dsh-assembly.resume
 
-Version: `v0.1.2`
-
 Bring an existing Codex or Claude Code conversation into DSH, then continue it
 with the DSH Agent.
 

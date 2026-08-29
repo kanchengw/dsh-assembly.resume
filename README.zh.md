@@ -1,7 +1,5 @@
 # dsh-assembly.resume
 
-版本：`v0.1.2`
-
 将已有的 Codex 或 Claude Code 会话带入 DSH，并由 DSH Agent 接续后续对话。
 
 ## 功能

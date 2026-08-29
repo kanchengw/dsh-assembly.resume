@@ -1,7 +1,7 @@
 /** Copy owned by the session-resume settings section. */
 export const zh = {
   nav: 'Assembly.Resume - 会话转接',
-  description: '将本地其他 Agent 会话导入到DeepSeek Harness。',
+  description: '将本地其他 Agent 会话导入到 DeepSeek Harness。',
   expand: '展开',
   collapse: '收起',
   title: '接管本地会话到 DSH',

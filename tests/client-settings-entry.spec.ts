@@ -77,7 +77,7 @@ describe('session-resume settings entry', () => {
     const component = readFileSync(resolve('src/client/ResumeSettingsSection.tsx'), 'utf8')
     const styles = readFileSync(resolve('src/client/ResumeSettingsSection.module.css'), 'utf8')
 
-    expect(zh.description).toBe('将本地其他 Agent 会话导入到DeepSeek Harness。')
+    expect(zh.description).toBe('将本地其他 Agent 会话导入到 DeepSeek Harness。')
     expect(zh.empty).toBe('没有找到可转接的会话')
     expect(en.description).toBe('Import local sessions from other agents into DeepSeek Harness.')
     expect(zh.agent).toBe('选择 Agent')
