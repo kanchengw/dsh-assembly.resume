@@ -408,7 +408,9 @@ function toDiscoveredExternalSession(session: NativeSessionSummary): DiscoveredE
 /** Discover native sessions without loading complete transcripts into the API. */
 export async function discoverExternalSessions(input: DiscoverExternalSessionsInput = {}, config: ProviderConfig = {}): Promise<DiscoveredExternalSession[]> {
   const sessions = await discoverNativeSessions(input, config)
-  return sessions.map(toDiscoveredExternalSession)
+  return sessions
+    .filter(session => session.provider !== 'codex' || session.codexSource !== 'appServer')
+    .map(toDiscoveredExternalSession)
 }
 
 /** Read and normalize one selected native transcript. */

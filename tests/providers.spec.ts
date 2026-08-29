@@ -38,6 +38,18 @@ describe('native provider discovery', () => {
     )
   })
 
+  it('does not discover Codex app-server sessions', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-resume-codex-app-server-'))
+    const cwd = join(root, 'workspace')
+    await mkdir(cwd)
+    await writeFile(join(root, 'app-server.jsonl'), [
+      JSON.stringify({ type: 'session_meta', payload: { session_id: 'codex-app-server', cwd, source: 'appServer' } }),
+      JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: 'agent task' } }),
+    ].join('\n'))
+
+    await expect(discoverExternalSessions({ provider: 'codex' }, { codexHome: root })).resolves.toEqual([])
+  })
+
   it('uses completed Codex UserMessage items for safe session previews', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-resume-codex-completed-user-'))
     const cwd = join(root, 'workspace')
