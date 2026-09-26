@@ -31,9 +31,7 @@ export const inject = ['slots', 'locale', 'remote', 'sessions', 'workspaces', 'u
 
 function createSectionProps(ctx: Context) {
   const remote = (): SessionResumeRemote => getSessionResumeRemote(ctx)
-  const sessions = ctx.get('sessions') as unknown as Pick<ISessions, 'open'> & {
-    create(options: { workspaceId?: string; sessionId?: SessionId }): Promise<SessionId>
-  }
+  const sessions = ctx.get('sessions') as unknown as Pick<ISessions, 'create'>
   const workspaces = ctx.get('workspaces') as IWorkspaces
   const uiWorkspace = ctx.get('uiWorkspace') as UiWorkspace
   return {
@@ -49,7 +47,10 @@ function createSectionProps(ctx: Context) {
     },
     chooseWorkspace: (): Promise<string | null> => uiWorkspace.pickDirectory(),
     openTarget: (targetSessionId: SessionId, projectPath: string | undefined): Promise<OpenDshTargetResult> => {
-      return openDshTargetSession(workspaces, sessions, targetSessionId, projectPath)
+      return openDshTargetSession(workspaces, {
+        open: (id) => { uiWorkspace.openSession(id) },
+        create: (options) => sessions.create(options),
+      }, targetSessionId, projectPath)
     },
   }
 }
@@ -58,13 +59,15 @@ function createSectionProps(ctx: Context) {
 export async function apply(ctx: Context): Promise<() => Promise<void>> {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'session-resume: dictionaries')
   const disposeRemote = await ctx.remote.$mount(TYPERT_REMOTE)
-  function ResumeCard(props: PropsRuntime<'settings.plugin.item'> & PropsLocale<'sessionResume'>) {
+  function ResumeCard(props: PropsRuntime<'settings.plugins.tab'> & PropsLocale<'sessionResume'>) {
     return createElement(ResumeSettingsSection, { ...props, ...createSectionProps(ctx) })
   }
 
-  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-    name: 'settings.plugin.item',
-    key: 'session-resume',
+  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
+    name: 'settings.plugins.tab',
+    id: 'session-resume',
+    order: 100,
+    label: () => ctx.locale.bind(NS)('nav'),
     locale: NS,
     inject: () => createSectionProps(ctx),
   }, ResumeCard))

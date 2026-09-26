@@ -17,7 +17,7 @@ import type {
 const json = (typeSymbol: string, schema: { parse(value: unknown): unknown }) => ({
   mode: 'strict' as const,
   typeSymbol,
-  schema,
+  create: () => schema,
 })
 
 const provider = z.union([z.literal('codex'), z.literal('claude-code'), z.literal('claude-code-desktop')])

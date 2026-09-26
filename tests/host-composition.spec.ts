@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import Storage from '@deepseek-ai/dsh-storage'
 import { storageBackendServiceKey } from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
-import SessionResumeService, { SESSION_RESUME_SETTINGS_NAMESPACE } from '../src/index.ts'
+import SessionResumeService from '../src/index.ts'
 import { FakeDshAgentRuntime, MemoryBackend } from './helpers.ts'
 
 const contexts: Context[] = []
@@ -22,14 +22,14 @@ describe('host composition', () => {
     ctx.provide(storageBackendServiceKey('memory'), backend)
     await ctx.plugin(StorageDomain, { backend: 'memory' })
     ctx.provide('agents', new FakeDshAgentRuntime() as never)
-    const registerSettingsNamespace = vi.fn()
-    ctx.provide('settings', { register: registerSettingsNamespace } as never)
+    const configureSettings = vi.fn()
+    ctx.provide('settings', { configure: configureSettings } as never)
     await ctx.plugin(SessionResumeService)
 
     expect(ctx.sessionResume).toBeInstanceOf(SessionResumeService)
     await expect(ctx.sessionResume.find()).resolves.toEqual([])
     expect(backend.units.has('session_resume')).toBe(true)
-    expect(registerSettingsNamespace).toHaveBeenCalledWith(SESSION_RESUME_SETTINGS_NAMESPACE, expect.any(Function))
+    expect(configureSettings).toHaveBeenCalledWith({ auto: false }, expect.anything())
   })
 
   it('rejects a malformed durable row when the domain is reopened', async () => {

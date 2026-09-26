@@ -4,7 +4,7 @@
 
 ## DSH 兼容性
 
-- 支持的 DSH 版本：[`0.1.2-rc.1`](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.2-rc.1)（9 月 3 日）
+- 支持的 DSH 版本：[`0.1.7-rc.2`](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-rc.2)（9 月 24 日）
 
 ## 功能
 

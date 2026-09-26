@@ -56,12 +56,8 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** Settings namespace that enrolls this plugin's card in the Plugins configuration surface. */
+/** Settings namespace retained for clients that identify this plugin's settings card. */
 export const SESSION_RESUME_SETTINGS_NAMESPACE = 'session-resume' as SettingsNamespace
-
-// The card has no mutable preference yet; the registered namespace is the
-// Plugins surface's discovery mechanism for independently shipped cards.
-const SessionResumeSettingsSchema = s.object({})
 
 /** Plugin configuration for native source discovery and DSH Agent takeover. */
 export interface Config {
@@ -205,7 +201,7 @@ export class SessionResumeService extends TypertRemoteService implements Externa
     this.defaultAgentOptions = config.agentOptions ?? {}
     this.autoRecover = config.autoRecover ?? true
     ctx.inject(['settings'], (settingsCtx) => {
-      settingsCtx.settings.register(SESSION_RESUME_SETTINGS_NAMESPACE, SessionResumeSettingsSchema)
+      settingsCtx.effect(() => settingsCtx.settings.configure({ auto: false }, ctx.fiber))
     })
   }
 

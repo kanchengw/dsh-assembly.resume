@@ -5,7 +5,7 @@ import { apply } from '../src/client/index.ts'
 import { en, zh } from '../src/client/locales.ts'
 
 describe('session-resume settings entry', () => {
-  it('registers inside the Plugins configuration card list', async () => {
+  it('registers inside the Plugins settings tab list', async () => {
     const register = vi.fn()
     const inject = vi.fn((_name: string, factory: () => unknown) => factory())
     const disposeRemote = vi.fn()
@@ -18,13 +18,13 @@ describe('session-resume settings entry', () => {
 
     await apply(ctx as never)
 
-    expect(inject).toHaveBeenCalledWith('settings.plugin.item', expect.any(Function))
+    expect(inject).toHaveBeenCalledWith('settings.plugins.tab', expect.any(Function))
     expect(register).toHaveBeenCalledWith(expect.objectContaining({
-      name: 'settings.plugin.item',
-      key: 'session-resume',
+      name: 'settings.plugins.tab',
+      id: 'session-resume',
+      order: 100,
     }), expect.any(Function))
     expect(register).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'settings.section' }), expect.any(Function))
-    expect(register).not.toHaveBeenCalledWith(expect.objectContaining({ name: 'settings.plugins.tab' }), expect.any(Function))
   })
 
   it('uses a collapsible peer-card shell rather than exposing controls in the list', () => {

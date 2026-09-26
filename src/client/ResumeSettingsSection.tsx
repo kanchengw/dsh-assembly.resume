@@ -8,7 +8,7 @@ import { claudeCodeIcon, codexIcon } from './provider-icons.ts'
 import type { OpenDshTargetResult } from './workspace-target.ts'
 import css from './ResumeSettingsSection.module.css'
 
-export type ResumeSettingsSectionProps = PropsRuntime<'settings.plugin.item'> & PropsLocale<'sessionResume'> & {
+export type ResumeSettingsSectionProps = PropsRuntime<'settings.plugins.tab'> & PropsLocale<'sessionResume'> & {
   readonly discover: (input: { provider: ExternalProvider; query?: string }) => Promise<DiscoveredExternalSession[]>
   readonly takeOver: (input: { provider: ExternalProvider; externalSessionId: string; targetWorkspacePath?: string }) => Promise<TakeOverResult>
   readonly chooseWorkspace: () => Promise<string | null>
